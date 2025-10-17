@@ -215,7 +215,33 @@ Total: 15
 
 These tests are designed to run in CI/CD pipelines. The Docker-based test runner ensures consistent test environments across different systems.
 
-### Example GitHub Actions
+### GitHub Actions CI/CD
+
+Our CI/CD pipeline (`.github/workflows/ci.yml`) automatically runs on every push and pull request:
+
+**Jobs:**
+1. **Security Scanning**
+   - Gitleaks: Secret detection
+   - Trivy: Filesystem and dependency vulnerability scanning
+   - Results uploaded to GitHub Security tab
+
+2. **Code Quality**
+   - ESLint: Code linting
+   - TypeScript: Type checking
+
+3. **Build**
+   - Transpile TypeScript to JavaScript
+   - Upload build artifacts
+
+4. **Tests**
+   - SQLite (in-memory)
+   - PostgreSQL 16
+   - MySQL 8.0
+   - MariaDB 11.2
+
+All database services run in GitHub Actions service containers with health checks. No additional secrets or tokens are required.
+
+### Example GitHub Actions Configuration
 
 ```yaml
 name: Tests
@@ -223,10 +249,21 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        options: --health-cmd pg_isready
+      mysql:
+        image: mysql:8.0
+        options: --health-cmd "mysqladmin ping"
+      mariadb:
+        image: mariadb:11.2
+        options: --health-cmd "healthcheck.sh --connect"
     steps:
-      - uses: actions/checkout@v3
-      - name: Run tests
-        run: docker compose run --rm test-runner
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+      - run: npm ci
+      - run: npm test
 ```
 
 ## Troubleshooting

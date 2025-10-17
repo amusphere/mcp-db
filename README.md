@@ -550,10 +550,23 @@ Contributions are welcome! Please:
 git clone https://github.com/amusphere/mcp-db.git
 cd mcp-db
 npm install
-npm run dev  # Start development server
-npm run lint # Run linter
-npm run typecheck # Type checking
+npm run dev        # Start development server with hot-reload
+npm run lint       # Run ESLint
+npm run typecheck  # Run TypeScript type checking
+npm test           # Run all tests (requires Docker)
+npm run test:docker # Run tests in Docker (recommended)
 ```
+
+### CI/CD Pipeline
+
+All pull requests automatically run through our CI/CD pipeline:
+
+- ✅ **Security Scanning**: Gitleaks (secrets) and Trivy (vulnerabilities)
+- ✅ **Code Quality**: ESLint and TypeScript type checking
+- ✅ **Build Verification**: Transpile TypeScript to JavaScript
+- ✅ **Comprehensive Testing**: All database tests (SQLite, PostgreSQL, MySQL, MariaDB)
+
+No additional setup required - all security scans use GitHub's built-in tokens.
 
 ## License
 

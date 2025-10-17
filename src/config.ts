@@ -11,6 +11,7 @@ export interface Settings {
   allowlistTables: string[];
   requireApiKey: boolean;
   apiKey: string;
+  metricsEnabled: boolean;
 }
 
 let cachedSettings: Settings | null = null;
@@ -53,6 +54,7 @@ export function getSettings(): Settings {
     allowlistTables: parseAllowlist(process.env.ALLOWLIST_TABLES),
     requireApiKey: toBoolean(process.env.REQUIRE_API_KEY, false),
     apiKey: process.env.API_KEY ?? "",
+    metricsEnabled: toBoolean(process.env.METRICS_ENABLED, false),
   };
 
   return cachedSettings;

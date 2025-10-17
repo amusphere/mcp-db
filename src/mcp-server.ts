@@ -26,8 +26,11 @@ import {
   enforceSingleStatement,
   validateAllowlist,
 } from "./sqlGuard.js";
+import { logger, generateTraceId, generateSpanId } from "./logger.js";
+import { initializeMetrics, recordQueryDuration, recordError } from "./metrics.js";
 
 const settings = getSettings();
+initializeMetrics({ enabled: settings.metricsEnabled });
 const normalizedAllowlist = new Set(settings.allowlistTables.map((item) => item.toLowerCase()));
 
 function allowlistAliases(table: string): Set<string> {
@@ -77,7 +80,7 @@ function resolveDatabaseConfig(bodyUrl?: string): NormalizedDatabaseConfig {
 const server = new Server(
   {
     name: "@amusphere/mcp-db",
-    version: "0.2.0",
+    version: "0.4.0",
   },
   {
     capabilities: {
@@ -191,11 +194,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest) => {
   const { name, arguments: args } = request.params;
+  const trace_id = generateTraceId();
+  const span_id = generateSpanId();
+  const startTime = Date.now();
+  let dbDriver = "unknown"; // Track driver for error metrics
+
+  logger.info("Tool call started", { trace_id, span_id, tool: name });
 
   try {
     switch (name) {
       case "db_tables": {
         const config = resolveDatabaseConfig(args?.db_url as string | undefined);
+        dbDriver = config.driver;
         const tables = await withTimeout(
           listTables(config, args?.schema as string | undefined),
           settings.queryTimeoutMs
@@ -212,6 +222,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
                 }
                 return false;
               });
+        const duration_ms = Date.now() - startTime;
+        recordQueryDuration(name, config.driver, "metadata", duration_ms / 1000);
+        logger.info("Tool call completed", {
+          trace_id,
+          span_id,
+          tool: name,
+          db: config.driver,
+          duration_ms,
+          tables: filtered.length,
+        });
         return {
           content: [
             {
@@ -228,11 +248,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           throw new Error("table parameter is required");
         }
         const config = resolveDatabaseConfig(args?.db_url as string | undefined);
+        dbDriver = config.driver;
         ensureTableAllowed(table, args?.schema as string | undefined);
         const columns = await withTimeout(
           describeTable(config, table, args?.schema as string | undefined),
           settings.queryTimeoutMs
         );
+        const duration_ms = Date.now() - startTime;
+        recordQueryDuration(name, config.driver, "metadata", duration_ms / 1000);
+        logger.info("Tool call completed", {
+          trace_id,
+          span_id,
+          tool: name,
+          db: config.driver,
+          duration_ms,
+          table,
+          columns: columns.length,
+        });
         return {
           content: [
             {
@@ -250,6 +282,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         }
 
         const config = resolveDatabaseConfig(args?.db_url as string | undefined);
+        dbDriver = config.driver;
         const validated = enforceSingleStatement(sql);
         const category = classifyStatement(validated);
 
@@ -306,6 +339,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           settings.queryTimeoutMs
         );
 
+        const duration_ms = Date.now() - startTime;
+        const rows = "rows" in result ? result.rows.length : result.rowcount;
+        recordQueryDuration(name, config.driver, category.toString(), duration_ms / 1000);
+        logger.info("Tool call completed", {
+          trace_id,
+          span_id,
+          tool: name,
+          db: config.driver,
+          duration_ms,
+          rows,
+          category,
+        });
+
         return {
           content: [
             {
@@ -323,6 +369,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         }
 
         const config = resolveDatabaseConfig(args?.db_url as string | undefined);
+        dbDriver = config.driver;
         const validated = enforceSingleStatement(sql);
 
         // Validate allowlist (similar to db_execute)
@@ -339,6 +386,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           settings.queryTimeoutMs
         );
 
+        const duration_ms = Date.now() - startTime;
+        recordQueryDuration(name, config.driver, "explain", duration_ms / 1000);
+        logger.info("Tool call completed", {
+          trace_id,
+          span_id,
+          tool: name,
+          db: config.driver,
+          duration_ms,
+          analyze,
+        });
+
         return {
           content: [
             {
@@ -353,7 +411,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error) {
+    const duration_ms = Date.now() - startTime;
     if (error instanceof Error && error.message === "timeout") {
+      recordError(name, dbDriver, "timeout");
+      logger.error("Tool call timed out", {
+        trace_id,
+        span_id,
+        tool: name,
+        duration_ms,
+        error: "timeout",
+      });
       return {
         content: [
           {
@@ -365,6 +432,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
       };
     }
     if (error instanceof SQLValidationError || error instanceof DatabaseError) {
+      const errorType = error instanceof SQLValidationError ? "validation" : "database";
+      recordError(name, dbDriver, errorType);
+      logger.error("Tool call failed", {
+        trace_id,
+        span_id,
+        tool: name,
+        duration_ms,
+        error: error.message,
+      });
       return {
         content: [
           {
@@ -375,6 +451,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         isError: true,
       };
     }
+    recordError(name, dbDriver, "unexpected");
+    logger.error("Tool call failed with unexpected error", {
+      trace_id,
+      span_id,
+      tool: name,
+      duration_ms,
+      error: error instanceof Error ? error.message : String(error),
+    });
     throw error;
   }
 });
