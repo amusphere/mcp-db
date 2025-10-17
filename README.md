@@ -139,6 +139,39 @@ Development mode with hot-reload:
 npm run dev
 ```
 
+### Testing
+
+Comprehensive tests are available for all supported databases. See [tests/README.md](tests/README.md) for detailed testing documentation.
+
+**Quick test commands:**
+
+```bash
+# Run all tests (requires Docker)
+npm test
+
+# Run individual database tests
+npm run test:sqlite      # No Docker required
+npm run test:postgres    # Requires PostgreSQL container
+npm run test:mysql       # Requires MySQL container
+npm run test:mariadb     # Requires MariaDB container
+```
+
+**Docker-based testing:**
+
+```bash
+# Start all databases
+docker-compose up -d postgres mysql mariadb
+
+# Run all tests
+npm test
+
+# Or run tests in Docker container
+docker-compose up --build test-runner
+
+# Stop and clean up
+docker-compose down -v
+```
+
 ### HTTP Server Mode (Legacy)
 
 For backwards compatibility with HTTP-based integrations:

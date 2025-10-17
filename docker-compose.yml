@@ -1,34 +1,28 @@
 services:
-  mcp-db:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      DB_URL: postgresql://mcp:password@db:5432/mcp
-      ALLOW_WRITES: "false"
-      ALLOW_DDL: "false"
-      MAX_ROWS: "500"
-      QUERY_TIMEOUT_SEC: "20"
-    depends_on:
-      db:
-        condition: service_healthy
-
-  db:
+  # PostgreSQL Database
+  postgres:
     image: postgres:16
+    container_name: mcp-postgres
     environment:
       POSTGRES_DB: mcp
       POSTGRES_USER: mcp
       POSTGRES_PASSWORD: password
     ports:
       - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - mcp-network
 
+  # MySQL Database
   mysql:
     image: mysql:8.0
+    container_name: mcp-mysql
     environment:
       MYSQL_DATABASE: mcp
       MYSQL_USER: mcp
@@ -36,14 +30,20 @@ services:
       MYSQL_ROOT_PASSWORD: rootpassword
     ports:
       - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - mcp-network
 
+  # MariaDB Database
   mariadb:
     image: mariadb:11.2
+    container_name: mcp-mariadb
     environment:
       MARIADB_DATABASE: mcp
       MARIADB_USER: mcp
@@ -51,8 +51,64 @@ services:
       MARIADB_ROOT_PASSWORD: rootpassword
     ports:
       - "3307:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - mcp-network
+
+  # MCP Server (for testing)
+  mcp-server:
+    build: .
+    container_name: mcp-server
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: postgresql://mcp:password@postgres:5432/mcp
+      ALLOW_WRITES: "true"
+      ALLOW_DDL: "true"
+      MAX_ROWS: "500"
+      QUERY_TIMEOUT_SEC: "20"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
+    networks:
+      - mcp-network
+
+  # Test Runner
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: mcp-test-runner
+    environment:
+      POSTGRES_URL: postgresql://mcp:password@postgres:5432/mcp
+      MYSQL_URL: mysql://mcp:password@mysql:3306/mcp
+      MARIADB_URL: mariadb://mcp:password@mariadb:3306/mcp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      mariadb:
+        condition: service_healthy
+    networks:
+      - mcp-network
+    command: ["npm", "run", "test"]
+
+volumes:
+  postgres-data:
+  mysql-data:
+  mariadb-data:
+
+networks:
+  mcp-network:
+    driver: bridge

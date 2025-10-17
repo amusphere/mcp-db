@@ -482,15 +482,23 @@ async function executeSqlite(
 ): Promise<ExecuteResultRead | ExecuteResultWrite> {
   const db = await getSqliteDatabase(path);
   try {
+    // SQLite library requires parameter keys to have ':' prefix
+    const sqliteArgs: Record<string, unknown> = {};
+    if (args) {
+      for (const [key, value] of Object.entries(args)) {
+        sqliteArgs[`:${key}`] = value;
+      }
+    }
+
     if (expectResult) {
-      const rows = (await db.all(sql, args ?? {})) as Array<Record<string, unknown>>;
+      const rows = (await db.all(sql, sqliteArgs)) as Array<Record<string, unknown>>;
       const truncated = rows.length > limit;
       return {
         rows: rows.slice(0, limit),
         truncated,
       };
     }
-    const result = await db.run(sql, args ?? {});
+    const result = await db.run(sql, sqliteArgs);
     const changes = typeof result.changes === "number" ? result.changes : 0;
     return { rowcount: changes };
   } catch (error) {
