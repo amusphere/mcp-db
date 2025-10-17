@@ -99,7 +99,12 @@ function getPostgresPool(connectionString: string): Pool {
   if (existing) {
     return existing;
   }
-  const pool = new Pool({ connectionString });
+  const pool = new Pool({
+    connectionString,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  });
   postgresPools.set(connectionString, pool);
   return pool;
 }
@@ -119,9 +124,57 @@ function getMysqlPool(connectionString: string): mysql.Pool {
   if (existing) {
     return existing;
   }
-  const pool = mysql.createPool(connectionString);
+  const pool = mysql.createPool({
+    uri: connectionString,
+    connectionLimit: 10,
+    waitForConnections: true,
+    queueLimit: 0,
+  });
   mysqlPools.set(connectionString, pool);
   return pool;
+}
+
+/**
+ * Close all database connections gracefully
+ * Should be called when shutting down the server
+ */
+export async function closeAllConnections(): Promise<void> {
+  const errors: Error[] = [];
+
+  // Close PostgreSQL pools
+  for (const [key, pool] of postgresPools.entries()) {
+    try {
+      await pool.end();
+      postgresPools.delete(key);
+    } catch (error) {
+      errors.push(new Error(`Failed to close PostgreSQL pool ${key}: ${(error as Error).message}`));
+    }
+  }
+
+  // Close MySQL pools
+  for (const [key, pool] of mysqlPools.entries()) {
+    try {
+      await pool.end();
+      mysqlPools.delete(key);
+    } catch (error) {
+      errors.push(new Error(`Failed to close MySQL pool ${key}: ${(error as Error).message}`));
+    }
+  }
+
+  // Close SQLite databases
+  for (const [key, dbPromise] of sqliteDbs.entries()) {
+    try {
+      const db = await dbPromise;
+      await db.close();
+      sqliteDbs.delete(key);
+    } catch (error) {
+      errors.push(new Error(`Failed to close SQLite database ${key}: ${(error as Error).message}`));
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new DatabaseError(`Errors during connection cleanup: ${errors.map((e) => e.message).join("; ")}`);
+  }
 }
 
 export async function listTables(config: NormalizedDatabaseConfig, schema?: string): Promise<string[]> {
