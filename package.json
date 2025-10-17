@@ -2,10 +2,17 @@
   "name": "@amusphere/mcp-db",
   "version": "0.3.0",
   "description": "Model Context Protocol (MCP) server for secure database access. Query SQLite, PostgreSQL, MySQL, and MariaDB databases with AI assistants like Claude and Codex.",
-  "main": "dist/index.js",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
   "type": "module",
   "bin": {
-    "mcp-db": "dist/index.js"
+    "mcp-db": "dist/src/index.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/src/index.js",
+      "types": "./dist/src/index.d.ts"
+    }
   },
   "scripts": {
     "build": "tsc --project tsconfig.json",
