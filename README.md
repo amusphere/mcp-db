@@ -30,10 +30,12 @@ A Model Context Protocol (MCP) server that provides secure database access for A
 The easiest way to use this MCP server is via `npx` (no installation required):
 
 ```bash
-npx @amusphere/mcp-db --host sqlite:///./dev.db
+npx @amusphere/mcp-db
 ```
 
 ### Configuration for MCP Clients
+
+This server is designed to let AI assistants dynamically specify database connections via the `db_url` parameter. You can start the server **without specifying a default database**, and the AI will provide the connection string when needed.
 
 #### Codex CLI
 
@@ -42,7 +44,13 @@ Add to your Codex configuration file (`~/.codex/mcp.toml` or similar):
 ```toml
 [mcp_servers.mcp-db]
 command = "npx"
-args = ["-y", "@amusphere/mcp-db", "--host", "sqlite:///./dev.db"]
+args = ["-y", "@amusphere/mcp-db"]
+```
+
+The AI assistant will then specify the database URL in each tool call:
+```
+You: "Show me tables in my SQLite database at ./data/app.db"
+AI: Uses db_url = "sqlite:///./data/app.db" in the tool call
 ```
 
 #### Claude Desktop
@@ -54,55 +62,64 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
   "mcpServers": {
     "mcp-db": {
       "command": "npx",
-      "args": ["-y", "@amusphere/mcp-db", "--host", "sqlite:///./dev.db"]
+      "args": ["-y", "@amusphere/mcp-db"]
     }
   }
 }
 ```
 
-#### PostgreSQL Example
+#### Optional: Set a Default Database
+
+If you want to set a default database (can still be overridden by the AI):
 
 ```toml
 [mcp_servers.mcp-db]
 command = "npx"
-args = [
-  "-y",
-  "@amusphere/mcp-db",
-  "--host", "postgresql://user:password@localhost:5432/mydb"
-]
+args = ["-y", "@amusphere/mcp-db", "--host", "sqlite:///./dev.db"]
 ```
 
 ## Usage Examples
 
-### Command Line
+### Recommended: Dynamic Database Selection
 
-#### SQLite Database
+Start the server without a default database and let the AI specify the connection:
 
 ```bash
-# Basic usage with SQLite
-npx @amusphere/mcp-db --host sqlite:///./dev.db
+# Start server (AI will provide db_url in each request)
+npx @amusphere/mcp-db
 
-# With write operations enabled
-npx @amusphere/mcp-db --host sqlite:///./dev.db --allow-writes
-
-# With table allowlist (only allow specific tables)
-npx @amusphere/mcp-db --host sqlite:///./dev.db --allowlist users,posts,comments
+# With security controls
+npx @amusphere/mcp-db --allow-writes --allowlist users,posts,comments
 
 # With custom limits
-npx @amusphere/mcp-db --host sqlite:///./dev.db --max-rows 100 --timeout 30
+npx @amusphere/mcp-db --max-rows 100 --timeout 30
 ```
 
-#### PostgreSQL Database
+**User conversation examples:**
+- "Show tables in sqlite:///./dev.db"
+- "Query the production database at postgresql://localhost/prod"
+- "Compare user counts between ./dev.db and ./prod.db"
+
+### Alternative: Default Database
+
+If you work primarily with one database, you can set a default (can still be overridden):
 
 ```bash
-# Basic usage
+# SQLite default
+npx @amusphere/mcp-db --host sqlite:///./dev.db
+
+# PostgreSQL default
 npx @amusphere/mcp-db --host postgresql://user:password@localhost:5432/mydb
 
-# With schema-qualified allowlist
+# With allowlist for default database
 npx @amusphere/mcp-db \
-  --host postgresql://user:password@localhost:5432/mydb \
-  --allowlist public.users,public.posts
+  --host sqlite:///./dev.db \
+  --allowlist users,posts,comments
 ```
+
+**User conversation examples:**
+- "Show me the tables" (uses default database)
+- "Now check the other database at ./other.db" (overrides default)
 
 ### Local Development
 
@@ -138,16 +155,18 @@ This exposes REST endpoints at `http://localhost:8080/tools/*` for non-MCP clien
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--host <url>` | Database connection URL (alias: `--db-url`) | `sqlite:///./dev.db` |
+| `--host <url>` | Optional default database URL (can be overridden by AI via `db_url` parameter) | None |
 | `--allow-writes` | Enable INSERT/UPDATE/DELETE operations | `false` |
 | `--allow-ddl` | Enable CREATE/ALTER/DROP operations | `false` |
-| `--allowlist <tables>` | Comma-separated list of allowed tables | All tables |
+| `--allowlist <tables>` | Comma-separated list of allowed tables (applies to all databases) | All tables |
 | `--max-rows <number>` | Maximum rows to return for SELECT queries | `500` |
 | `--timeout <seconds>` | Query timeout in seconds | `20` |
 | `--http-mode` | Run as HTTP server instead of MCP stdio | `false` |
 | `--port <number>` | Port for HTTP mode | `8080` |
 | `--require-api-key` | Require X-API-Key header (HTTP mode only) | `false` |
 | `--api-key <value>` | Expected API key value | - |
+
+**Note:** The `--host` parameter is optional. If not specified, the AI must provide `db_url` in every tool call. If specified, it serves as a default that can be overridden per-request.
 
 ### Database URL Formats
 
@@ -203,13 +222,20 @@ This server provides three MCP tools for database operations:
 List all tables in the database.
 
 **Parameters:**
-- `db_url` (optional): Override default database URL
+- `db_url` (required/optional): Database URL. Required if no default `--host` is set, otherwise optional to override
 - `schema` (optional): Filter by schema (PostgreSQL only)
 
-**Example:**
+**Example - Dynamic database selection:**
 ```json
 {
-  "db_url": "sqlite:///./dev.db",
+  "db_url": "sqlite:///./data/myapp.db"
+}
+```
+
+**Example - PostgreSQL with schema:**
+```json
+{
+  "db_url": "postgresql://user:pass@localhost:5432/mydb",
   "schema": "public"
 }
 ```
@@ -219,12 +245,21 @@ Get column information for a specific table.
 
 **Parameters:**
 - `table` (required): Table name to describe
-- `db_url` (optional): Override default database URL
+- `db_url` (required/optional): Database URL. Required if no default `--host` is set, otherwise optional to override
 - `schema` (optional): Schema name (PostgreSQL only)
 
-**Example:**
+**Example - Dynamic database selection:**
 ```json
 {
+  "db_url": "sqlite:///./users.db",
+  "table": "users"
+}
+```
+
+**Example - With schema (PostgreSQL):**
+```json
+{
+  "db_url": "postgresql://localhost/mydb",
   "table": "users",
   "schema": "public"
 }
@@ -235,14 +270,15 @@ Execute a SQL statement with safety controls.
 
 **Parameters:**
 - `sql` (required): SQL statement to execute
+- `db_url` (required/optional): Database URL. Required if no default `--host` is set, otherwise optional to override
 - `args` (optional): Named parameters (use `:param` syntax in SQL)
 - `allow_write` (optional): Must be `true` for write operations
 - `row_limit` (optional): Override default max rows
-- `db_url` (optional): Override default database URL
 
-**Example:**
+**Example - Dynamic query with parameters:**
 ```json
 {
+  "db_url": "sqlite:///./data/app.db",
   "sql": "SELECT * FROM users WHERE status = :status LIMIT 10",
   "args": {
     "status": "active"
@@ -250,17 +286,58 @@ Execute a SQL statement with safety controls.
 }
 ```
 
+**Example - Cross-database query:**
+```json
+{
+  "db_url": "postgresql://user:pass@prod-server:5432/analytics",
+  "sql": "SELECT COUNT(*) as total FROM events WHERE date >= :start_date",
+  "args": {
+    "start_date": "2024-01-01"
+  }
+}
+```
+
 ## How AI Assistants Use These Tools
+
+This server is designed for **dynamic database connections**. AI assistants specify the database URL in each request, allowing you to work with multiple databases seamlessly.
+
+### Example Conversations
+
+**Working with SQLite:**
+```
+You: "Connect to my SQLite database at ./data/users.db and show me all tables"
+AI: Calls db_tables with db_url="sqlite:///./data/users.db"
+```
+
+**Switching between databases:**
+```
+You: "Now check the production database at /var/lib/app/prod.db"
+AI: Calls db_tables with db_url="sqlite:////var/lib/app/prod.db"
+
+You: "And also show me tables in the PostgreSQL analytics database"
+AI: Calls db_tables with db_url="postgresql://user:pass@localhost:5432/analytics"
+```
+
+**Natural language queries:**
+```
+You: "How many users are in the SQLite database at ./users.db?"
+AI: Calls db_execute with:
+    - db_url="sqlite:///./users.db"
+    - sql="SELECT COUNT(*) FROM users"
+```
+
+### Supported Operations
 
 When you connect an AI assistant (like Claude or Codex) to this MCP server, it can:
 
-1. **Explore your database structure**: "What tables are in my database?"
-2. **Understand table schemas**: "Show me the columns in the users table"
-3. **Query data**: "How many active users do we have?"
-4. **Analyze data**: "What are the top 10 products by sales?"
-5. **Generate insights**: "Find any duplicate email addresses in the users table"
+1. **Connect to any database dynamically**: Specify different databases in natural language
+2. **Explore database structure**: "What tables are in database X?"
+3. **Understand table schemas**: "Show me the columns in the users table from database Y"
+4. **Query data**: "How many active users in the production database?"
+5. **Compare across databases**: "Compare user counts between dev.db and prod.db"
+6. **Analyze data**: "Find duplicates in the PostgreSQL analytics database"
 
-The AI assistant will automatically use the appropriate tool and construct safe SQL queries based on your natural language requests.
+The AI assistant will automatically extract the database path/URL from your request and use the appropriate tool with the correct `db_url` parameter.
 
 ## Configuration Reference
 
