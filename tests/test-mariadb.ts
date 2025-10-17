@@ -4,7 +4,7 @@
  * Tests basic operations against a MariaDB database
  */
 
-import { normalizeDatabaseUrl, listTables, describeTable, executeSql, explainQuery } from "../src/db.js";
+import { normalizeDatabaseUrl, listTables, describeTable, executeSql } from "../src/db.js";
 
 interface TestResult {
   name: string;

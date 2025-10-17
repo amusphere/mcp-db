@@ -5,7 +5,6 @@
  */
 
 import { normalizeDatabaseUrl, listTables, describeTable, executeSql, explainQuery } from "../src/db.js";
-import { DatabaseError } from "../src/db.js";
 
 interface TestResult {
   name: string;
