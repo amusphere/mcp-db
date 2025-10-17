@@ -16,6 +16,7 @@ import {
   enforceSingleStatement,
   validateAllowlist,
 } from "./sqlGuard.js";
+import { logger, generateTraceId, generateSpanId, type LogContext } from "./logger.js";
 
 const settings = getSettings();
 const normalizedAllowlist = new Set(settings.allowlistTables.map((item) => item.toLowerCase()));
@@ -46,8 +47,12 @@ interface ExplainRequestBody {
   analyze?: boolean;
 }
 
-function auditLog(payload: Record<string, unknown>): void {
-  console.log(JSON.stringify(payload));
+function auditLog(trace_id: string, span_id: string, tool: string, context: LogContext): void {
+  if (context.error) {
+    logger.error("HTTP request failed", { trace_id, span_id, tool, ...context });
+  } else {
+    logger.info("HTTP request completed", { trace_id, span_id, tool, ...context });
+  }
 }
 
 function allowlistAliases(table: string): Set<string> {
@@ -110,12 +115,14 @@ export function registerRoutes(app: FastifyInstance): void {
       },
     },
     async (request, reply) => {
+      const trace_id = generateTraceId();
+      const span_id = generateSpanId();
       const start = Date.now();
+      
       if (settings.requireApiKey) {
         const header = request.headers["x-api-key"];
         if (header !== settings.apiKey) {
-          auditLog({
-            tool: "db.tables",
+          auditLog(trace_id, span_id, "db.tables", {
             category: "metadata",
             duration_ms: Date.now() - start,
             error: "unauthorized",
@@ -129,8 +136,7 @@ export function registerRoutes(app: FastifyInstance): void {
         config = resolveDatabaseConfig(request.body?.db_url);
       } catch (error) {
         const message = (error as Error).message;
-        auditLog({
-          tool: "db.tables",
+        auditLog(trace_id, span_id, "db.tables", {
           category: "metadata",
           duration_ms: Date.now() - start,
           error: message,
@@ -156,17 +162,16 @@ export function registerRoutes(app: FastifyInstance): void {
                 }
                 return false;
               });
-        auditLog({
-          tool: "db.tables",
+        auditLog(trace_id, span_id, "db.tables", {
           category: "metadata",
+          db: config.driver,
           duration_ms: Date.now() - start,
-          rowcount: filtered.length,
+          tables: filtered.length,
         });
         await reply.send({ tables: filtered });
       } catch (error) {
         if ((error as Error).message === "timeout") {
-          auditLog({
-            tool: "db.tables",
+          auditLog(trace_id, span_id, "db.tables", {
             category: "metadata",
             duration_ms: Date.now() - start,
             error: "timeout",
@@ -175,8 +180,7 @@ export function registerRoutes(app: FastifyInstance): void {
           return;
         }
         const message = (error as Error).message;
-        auditLog({
-          tool: "db.tables",
+        auditLog(trace_id, span_id, "db.tables", {
           category: "metadata",
           duration_ms: Date.now() - start,
           error: message,
@@ -203,12 +207,14 @@ export function registerRoutes(app: FastifyInstance): void {
       },
     },
     async (request, reply) => {
+      const trace_id = generateTraceId();
+      const span_id = generateSpanId();
       const start = Date.now();
+      
       if (settings.requireApiKey) {
         const header = request.headers["x-api-key"];
         if (header !== settings.apiKey) {
-          auditLog({
-            tool: "db.describe_table",
+          auditLog(trace_id, span_id, "db.describe_table", {
             category: "metadata",
             duration_ms: Date.now() - start,
             error: "unauthorized",
@@ -222,8 +228,7 @@ export function registerRoutes(app: FastifyInstance): void {
         config = resolveDatabaseConfig(request.body?.db_url);
       } catch (error) {
         const message = (error as Error).message;
-        auditLog({
-          tool: "db.describe_table",
+        auditLog(trace_id, span_id, "db.describe_table", {
           category: "metadata",
           duration_ms: Date.now() - start,
           error: message,
@@ -236,8 +241,7 @@ export function registerRoutes(app: FastifyInstance): void {
         ensureTableAllowed(request.body.table, request.body?.schema);
       } catch (error) {
         const message = (error as Error).message;
-        auditLog({
-          tool: "db.describe_table",
+        auditLog(trace_id, span_id, "db.describe_table", {
           category: "metadata",
           duration_ms: Date.now() - start,
           error: message,
@@ -252,27 +256,26 @@ export function registerRoutes(app: FastifyInstance): void {
           settings.queryTimeoutMs
         );
         if (columns.length === 0) {
-          auditLog({
-            tool: "db.describe_table",
+          auditLog(trace_id, span_id, "db.describe_table", {
             category: "metadata",
+            db: config.driver,
             duration_ms: Date.now() - start,
-            rowcount: 0,
+            columns: 0,
             error: "not_found",
           });
           await reply.status(404).send({ detail: "Table not found" });
           return;
         }
-        auditLog({
-          tool: "db.describe_table",
+        auditLog(trace_id, span_id, "db.describe_table", {
           category: "metadata",
+          db: config.driver,
           duration_ms: Date.now() - start,
-          rowcount: columns.length,
+          columns: columns.length,
         });
         await reply.send({ columns });
       } catch (error) {
         if ((error as Error).message === "timeout") {
-          auditLog({
-            tool: "db.describe_table",
+          auditLog(trace_id, span_id, "db.describe_table", {
             category: "metadata",
             duration_ms: Date.now() - start,
             error: "timeout",
@@ -281,8 +284,7 @@ export function registerRoutes(app: FastifyInstance): void {
           return;
         }
         const message = error instanceof DatabaseError ? error.message : (error as Error).message;
-        auditLog({
-          tool: "db.describe_table",
+        auditLog(trace_id, span_id, "db.describe_table", {
           category: "metadata",
           duration_ms: Date.now() - start,
           error: message,
@@ -311,13 +313,15 @@ export function registerRoutes(app: FastifyInstance): void {
       },
     },
     async (request, reply) => {
+      const trace_id = generateTraceId();
+      const span_id = generateSpanId();
       const start = Date.now();
       const body = request.body;
+      
       if (settings.requireApiKey) {
         const header = request.headers["x-api-key"];
         if (header !== settings.apiKey) {
-          auditLog({
-            tool: "db.execute",
+          auditLog(trace_id, span_id, "db.execute", {
             category: "unknown",
             duration_ms: Date.now() - start,
             error: "unauthorized",
@@ -335,8 +339,7 @@ export function registerRoutes(app: FastifyInstance): void {
       } catch (error) {
         const message = (error as Error).message;
         const status = error instanceof SQLValidationError ? 403 : 400;
-        auditLog({
-          tool: "db.execute",
+        auditLog(trace_id, span_id, "db.execute", {
           category: "unknown",
           duration_ms: Date.now() - start,
           error: message,
@@ -347,8 +350,7 @@ export function registerRoutes(app: FastifyInstance): void {
 
       const category = classifyStatement(normalizedSql);
       if (category === StatementCategory.UNKNOWN) {
-        auditLog({
-          tool: "db.execute",
+        auditLog(trace_id, span_id, "db.execute", {
           category: "unknown",
           duration_ms: Date.now() - start,
           error: "unsupported",
@@ -357,8 +359,7 @@ export function registerRoutes(app: FastifyInstance): void {
         return;
       }
       if (category === StatementCategory.DDL && !settings.allowDdl) {
-        auditLog({
-          tool: "db.execute",
+        auditLog(trace_id, span_id, "db.execute", {
           category: category.valueOf(),
           duration_ms: Date.now() - start,
           error: "ddl_disabled",
@@ -370,8 +371,7 @@ export function registerRoutes(app: FastifyInstance): void {
         category === StatementCategory.WRITE &&
         (!settings.allowWrites || !body.allow_write)
       ) {
-        auditLog({
-          tool: "db.execute",
+        auditLog(trace_id, span_id, "db.execute", {
           category: category.valueOf(),
           duration_ms: Date.now() - start,
           error: "write_disabled",
@@ -385,8 +385,7 @@ export function registerRoutes(app: FastifyInstance): void {
       let effectiveLimit = settings.maxRows;
       if (body.row_limit !== undefined) {
         if (!Number.isInteger(body.row_limit) || body.row_limit <= 0) {
-          auditLog({
-            tool: "db.execute",
+          auditLog(trace_id, span_id, "db.execute", {
             category: category.valueOf(),
             duration_ms: Date.now() - start,
             error: "invalid_row_limit",
@@ -405,9 +404,9 @@ export function registerRoutes(app: FastifyInstance): void {
         );
         if (expectResult) {
           const readResult = result as { rows: Record<string, unknown>[]; truncated: boolean };
-          auditLog({
-            tool: "db.execute",
+          auditLog(trace_id, span_id, "db.execute", {
             category: category.valueOf(),
+            db: config.driver,
             duration_ms: Date.now() - start,
             rows: readResult.rows.length,
             truncated: readResult.truncated,
@@ -415,9 +414,9 @@ export function registerRoutes(app: FastifyInstance): void {
           await reply.send(readResult);
         } else {
           const writeResult = result as { rowcount: number };
-          auditLog({
-            tool: "db.execute",
+          auditLog(trace_id, span_id, "db.execute", {
             category: category.valueOf(),
+            db: config.driver,
             duration_ms: Date.now() - start,
             rowcount: writeResult.rowcount,
           });
@@ -425,8 +424,7 @@ export function registerRoutes(app: FastifyInstance): void {
         }
       } catch (error) {
         if ((error as Error).message === "timeout") {
-          auditLog({
-            tool: "db.execute",
+          auditLog(trace_id, span_id, "db.execute", {
             category: category.valueOf(),
             duration_ms: Date.now() - start,
             error: "timeout",
@@ -435,8 +433,7 @@ export function registerRoutes(app: FastifyInstance): void {
           return;
         }
         const message = error instanceof DatabaseError ? error.message : (error as Error).message;
-        auditLog({
-          tool: "db.execute",
+        auditLog(trace_id, span_id, "db.execute", {
           category: category.valueOf(),
           duration_ms: Date.now() - start,
           error: message,
@@ -464,13 +461,15 @@ export function registerRoutes(app: FastifyInstance): void {
       },
     },
     async (request, reply) => {
+      const trace_id = generateTraceId();
+      const span_id = generateSpanId();
       const start = Date.now();
       const body = request.body;
+      
       if (settings.requireApiKey) {
         const header = request.headers["x-api-key"];
         if (header !== settings.apiKey) {
-          auditLog({
-            tool: "db.explain",
+          auditLog(trace_id, span_id, "db.explain", {
             category: "metadata",
             duration_ms: Date.now() - start,
             error: "unauthorized",
@@ -488,8 +487,7 @@ export function registerRoutes(app: FastifyInstance): void {
       } catch (error) {
         const message = (error as Error).message;
         const status = error instanceof SQLValidationError ? 403 : 400;
-        auditLog({
-          tool: "db.explain",
+        auditLog(trace_id, span_id, "db.explain", {
           category: "metadata",
           duration_ms: Date.now() - start,
           error: message,
@@ -503,17 +501,16 @@ export function registerRoutes(app: FastifyInstance): void {
           explainQuery(config, normalizedSql, body.args, body.analyze ?? false),
           settings.queryTimeoutMs
         );
-        auditLog({
-          tool: "db.explain",
+        auditLog(trace_id, span_id, "db.explain", {
           category: "metadata",
+          db: config.driver,
           duration_ms: Date.now() - start,
           analyze: body.analyze ?? false,
         });
         await reply.send(result);
       } catch (error) {
         if ((error as Error).message === "timeout") {
-          auditLog({
-            tool: "db.explain",
+          auditLog(trace_id, span_id, "db.explain", {
             category: "metadata",
             duration_ms: Date.now() - start,
             error: "timeout",
@@ -522,8 +519,7 @@ export function registerRoutes(app: FastifyInstance): void {
           return;
         }
         const message = error instanceof DatabaseError ? error.message : (error as Error).message;
-        auditLog({
-          tool: "db.explain",
+        auditLog(trace_id, span_id, "db.explain", {
           category: "metadata",
           duration_ms: Date.now() - start,
           error: message,

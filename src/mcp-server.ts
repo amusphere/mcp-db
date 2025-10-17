@@ -26,6 +26,7 @@ import {
   enforceSingleStatement,
   validateAllowlist,
 } from "./sqlGuard.js";
+import { logger, generateTraceId, generateSpanId } from "./logger.js";
 
 const settings = getSettings();
 const normalizedAllowlist = new Set(settings.allowlistTables.map((item) => item.toLowerCase()));
@@ -191,6 +192,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest) => {
   const { name, arguments: args } = request.params;
+  const trace_id = generateTraceId();
+  const span_id = generateSpanId();
+  const startTime = Date.now();
+
+  logger.info("Tool call started", { trace_id, span_id, tool: name });
 
   try {
     switch (name) {
@@ -212,6 +218,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
                 }
                 return false;
               });
+        const duration_ms = Date.now() - startTime;
+        logger.info("Tool call completed", {
+          trace_id,
+          span_id,
+          tool: name,
+          db: config.driver,
+          duration_ms,
+          tables: filtered.length,
+        });
         return {
           content: [
             {
@@ -233,6 +248,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           describeTable(config, table, args?.schema as string | undefined),
           settings.queryTimeoutMs
         );
+        const duration_ms = Date.now() - startTime;
+        logger.info("Tool call completed", {
+          trace_id,
+          span_id,
+          tool: name,
+          db: config.driver,
+          duration_ms,
+          table,
+          columns: columns.length,
+        });
         return {
           content: [
             {
@@ -306,6 +331,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           settings.queryTimeoutMs
         );
 
+        const duration_ms = Date.now() - startTime;
+        const rows = "rows" in result ? result.rows.length : result.rowcount;
+        logger.info("Tool call completed", {
+          trace_id,
+          span_id,
+          tool: name,
+          db: config.driver,
+          duration_ms,
+          rows,
+          category,
+        });
+
         return {
           content: [
             {
@@ -339,6 +376,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           settings.queryTimeoutMs
         );
 
+        const duration_ms = Date.now() - startTime;
+        logger.info("Tool call completed", {
+          trace_id,
+          span_id,
+          tool: name,
+          db: config.driver,
+          duration_ms,
+          analyze,
+        });
+
         return {
           content: [
             {
@@ -353,7 +400,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error) {
+    const duration_ms = Date.now() - startTime;
     if (error instanceof Error && error.message === "timeout") {
+      logger.error("Tool call timed out", {
+        trace_id,
+        span_id,
+        tool: name,
+        duration_ms,
+        error: "timeout",
+      });
       return {
         content: [
           {
@@ -365,6 +420,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
       };
     }
     if (error instanceof SQLValidationError || error instanceof DatabaseError) {
+      logger.error("Tool call failed", {
+        trace_id,
+        span_id,
+        tool: name,
+        duration_ms,
+        error: error.message,
+      });
       return {
         content: [
           {
@@ -375,6 +437,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         isError: true,
       };
     }
+    logger.error("Tool call failed with unexpected error", {
+      trace_id,
+      span_id,
+      tool: name,
+      duration_ms,
+      error: error instanceof Error ? error.message : String(error),
+    });
     throw error;
   }
 });
