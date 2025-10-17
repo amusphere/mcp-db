@@ -119,7 +119,7 @@ export function registerRoutes(app: FastifyInstance): void {
       const trace_id = generateTraceId();
       const span_id = generateSpanId();
       const start = Date.now();
-      
+
       if (settings.requireApiKey) {
         const header = request.headers["x-api-key"];
         if (header !== settings.apiKey) {
@@ -215,7 +215,7 @@ export function registerRoutes(app: FastifyInstance): void {
       const trace_id = generateTraceId();
       const span_id = generateSpanId();
       const start = Date.now();
-      
+
       if (settings.requireApiKey) {
         const header = request.headers["x-api-key"];
         if (header !== settings.apiKey) {
@@ -326,7 +326,7 @@ export function registerRoutes(app: FastifyInstance): void {
       const span_id = generateSpanId();
       const start = Date.now();
       const body = request.body;
-      
+
       if (settings.requireApiKey) {
         const header = request.headers["x-api-key"];
         if (header !== settings.apiKey) {
@@ -478,12 +478,12 @@ export function registerRoutes(app: FastifyInstance): void {
       const span_id = generateSpanId();
       const start = Date.now();
       const body = request.body;
-      
+
       if (settings.requireApiKey) {
         const header = request.headers["x-api-key"];
         if (header !== settings.apiKey) {
           auditLog(trace_id, span_id, "db.explain", {
-            category: "metadata",
+            category: "explain",
             duration_ms: Date.now() - start,
             error: "unauthorized",
           });
@@ -501,7 +501,7 @@ export function registerRoutes(app: FastifyInstance): void {
         const message = (error as Error).message;
         const status = error instanceof SQLValidationError ? 403 : 400;
         auditLog(trace_id, span_id, "db.explain", {
-          category: "metadata",
+          category: "explain",
           duration_ms: Date.now() - start,
           error: message,
         });
@@ -527,7 +527,7 @@ export function registerRoutes(app: FastifyInstance): void {
         if ((error as Error).message === "timeout") {
           recordError("db.explain", config.driver, "timeout");
           auditLog(trace_id, span_id, "db.explain", {
-            category: "metadata",
+            category: "explain",
             duration_ms: Date.now() - start,
             error: "timeout",
           });
@@ -537,7 +537,7 @@ export function registerRoutes(app: FastifyInstance): void {
         recordError("db.explain", config.driver, "error");
         const message = error instanceof DatabaseError ? error.message : (error as Error).message;
         auditLog(trace_id, span_id, "db.explain", {
-          category: "metadata",
+          category: "explain",
           duration_ms: Date.now() - start,
           error: message,
         });

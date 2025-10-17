@@ -1,6 +1,6 @@
 {
   "name": "@amusphere/mcp-db",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Model Context Protocol (MCP) server for secure database access. Query SQLite, PostgreSQL, MySQL, and MariaDB databases with AI assistants like Claude and Codex.",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",

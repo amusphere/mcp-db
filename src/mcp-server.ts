@@ -80,7 +80,7 @@ function resolveDatabaseConfig(bodyUrl?: string): NormalizedDatabaseConfig {
 const server = new Server(
   {
     name: "@amusphere/mcp-db",
-    version: "0.2.0",
+    version: "0.4.0",
   },
   {
     capabilities: {
