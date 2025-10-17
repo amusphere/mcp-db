@@ -1,8 +1,9 @@
 import { Pool, PoolClient } from "pg";
 import sqlite3 from "sqlite3";
 import { open, Database } from "sqlite";
+import mysql from "mysql2/promise";
 
-export type Driver = "postgres" | "sqlite";
+export type Driver = "postgres" | "sqlite" | "mysql";
 
 export interface NormalizedDatabaseConfig {
   driver: Driver;
@@ -15,6 +16,7 @@ sqlite3.verbose();
 
 const postgresPools = new Map<string, Pool>();
 const sqliteDbs = new Map<string, Promise<Database<sqlite3.Database, sqlite3.Statement>>>();
+const mysqlPools = new Map<string, mysql.Pool>();
 
 export class DatabaseError extends Error {}
 
@@ -58,6 +60,16 @@ export function normalizeDatabaseUrl(rawUrl: string): NormalizedDatabaseConfig {
     };
   }
 
+  if (normalized.startsWith("mysql://") || normalized.startsWith("mariadb://")) {
+    // Convert mariadb:// to mysql:// for compatibility
+    const mysqlUrl = normalized.replace(/^mariadb:\/\//, "mysql://");
+    return {
+      driver: "mysql",
+      key: mysqlUrl,
+      connectionString: mysqlUrl,
+    };
+  }
+
   throw new DatabaseError(`Unsupported database URL: ${rawUrl}`);
 }
 
@@ -87,7 +99,12 @@ function getPostgresPool(connectionString: string): Pool {
   if (existing) {
     return existing;
   }
-  const pool = new Pool({ connectionString });
+  const pool = new Pool({
+    connectionString,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  });
   postgresPools.set(connectionString, pool);
   return pool;
 }
@@ -100,6 +117,64 @@ async function getSqliteDatabase(path: string): Promise<Database<sqlite3.Databas
   const dbPromise = open({ filename: path, driver: sqlite3.Database });
   sqliteDbs.set(path, dbPromise);
   return dbPromise;
+}
+
+function getMysqlPool(connectionString: string): mysql.Pool {
+  const existing = mysqlPools.get(connectionString);
+  if (existing) {
+    return existing;
+  }
+  const pool = mysql.createPool({
+    uri: connectionString,
+    connectionLimit: 10,
+    waitForConnections: true,
+    queueLimit: 0,
+  });
+  mysqlPools.set(connectionString, pool);
+  return pool;
+}
+
+/**
+ * Close all database connections gracefully
+ * Should be called when shutting down the server
+ */
+export async function closeAllConnections(): Promise<void> {
+  const errors: Error[] = [];
+
+  // Close PostgreSQL pools
+  for (const [key, pool] of postgresPools.entries()) {
+    try {
+      await pool.end();
+      postgresPools.delete(key);
+    } catch (error) {
+      errors.push(new Error(`Failed to close PostgreSQL pool ${key}: ${(error as Error).message}`));
+    }
+  }
+
+  // Close MySQL pools
+  for (const [key, pool] of mysqlPools.entries()) {
+    try {
+      await pool.end();
+      mysqlPools.delete(key);
+    } catch (error) {
+      errors.push(new Error(`Failed to close MySQL pool ${key}: ${(error as Error).message}`));
+    }
+  }
+
+  // Close SQLite databases
+  for (const [key, dbPromise] of sqliteDbs.entries()) {
+    try {
+      const db = await dbPromise;
+      await db.close();
+      sqliteDbs.delete(key);
+    } catch (error) {
+      errors.push(new Error(`Failed to close SQLite database ${key}: ${(error as Error).message}`));
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new DatabaseError(`Errors during connection cleanup: ${errors.map((e) => e.message).join("; ")}`);
+  }
 }
 
 export async function listTables(config: NormalizedDatabaseConfig, schema?: string): Promise<string[]> {
@@ -135,6 +210,37 @@ export async function listTables(config: NormalizedDatabaseConfig, schema?: stri
       return rows.map((row) => row.name);
     } catch (error) {
       throw new DatabaseError((error as Error).message);
+    }
+  }
+
+  if (config.driver === "mysql") {
+    const pool = getMysqlPool(config.connectionString);
+    const connection = await pool.getConnection();
+    try {
+      let query =
+        "SELECT table_schema, table_name FROM information_schema.tables " +
+        "WHERE table_type IN ('BASE TABLE', 'VIEW') " +
+        "AND table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')";
+      const params: unknown[] = [];
+
+      if (schema) {
+        query += " AND table_schema = ?";
+        params.push(schema);
+      }
+
+      query += " ORDER BY table_schema, table_name";
+      const [rows] = await connection.query<mysql.RowDataPacket[]>(query, params);
+
+      return rows.map((row) => {
+        // MariaDB returns lowercase field names, MySQL returns uppercase
+        const schemaName = (row.TABLE_SCHEMA ?? row.table_schema) as string;
+        const tableName = (row.TABLE_NAME ?? row.table_name) as string;
+        return `${schemaName}.${tableName}`;
+      });
+    } catch (error) {
+      throw new DatabaseError((error as Error).message);
+    } finally {
+      connection.release();
     }
   }
 
@@ -202,6 +308,36 @@ export async function describeTable(
     }
   }
 
+  if (config.driver === "mysql") {
+    const { schema: resolvedSchema, table: resolvedTable } = splitTableIdentifier(table, schema);
+    const pool = getMysqlPool(config.connectionString);
+    const connection = await pool.getConnection();
+    try {
+      // If no schema specified, use the database from the connection string
+      let schemaName = resolvedSchema;
+      if (!schemaName) {
+        const [dbRows] = await connection.query<mysql.RowDataPacket[]>("SELECT DATABASE() as db");
+        schemaName = dbRows[0]?.db as string;
+      }
+
+      const query =
+        "SELECT column_name, data_type, is_nullable FROM information_schema.columns " +
+        "WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position";
+      const [rows] = await connection.query<mysql.RowDataPacket[]>(query, [schemaName, resolvedTable]);
+
+      return rows.map((row) => ({
+        // MariaDB returns lowercase field names, MySQL returns uppercase
+        column_name: (row.COLUMN_NAME ?? row.column_name) as string,
+        data_type: (row.DATA_TYPE ?? row.data_type) as string,
+        is_nullable: (row.IS_NULLABLE ?? row.is_nullable) === "YES",
+      }));
+    } catch (error) {
+      throw new DatabaseError((error as Error).message);
+    } finally {
+      connection.release();
+    }
+  }
+
   throw new DatabaseError("Unsupported database driver");
 }
 
@@ -226,6 +362,9 @@ export async function executeSql(
   }
   if (config.driver === "sqlite") {
     return executeSqlite(config.sqlitePath!, sql, args, expectResult, limit);
+  }
+  if (config.driver === "mysql") {
+    return executeMysql(config.connectionString, sql, args, expectResult, limit);
   }
   throw new DatabaseError("Unsupported database driver");
 }
@@ -404,19 +543,202 @@ async function executeSqlite(
 ): Promise<ExecuteResultRead | ExecuteResultWrite> {
   const db = await getSqliteDatabase(path);
   try {
+    // SQLite library requires parameter keys to have ':' prefix
+    const sqliteArgs: Record<string, unknown> = {};
+    if (args) {
+      for (const [key, value] of Object.entries(args)) {
+        sqliteArgs[`:${key}`] = value;
+      }
+    }
+
     if (expectResult) {
-      const rows = (await db.all(sql, args ?? {})) as Array<Record<string, unknown>>;
+      const rows = (await db.all(sql, sqliteArgs)) as Array<Record<string, unknown>>;
       const truncated = rows.length > limit;
       return {
         rows: rows.slice(0, limit),
         truncated,
       };
     }
-    const result = await db.run(sql, args ?? {});
+    const result = await db.run(sql, sqliteArgs);
     const changes = typeof result.changes === "number" ? result.changes : 0;
     return { rowcount: changes };
   } catch (error) {
     throw new DatabaseError((error as Error).message);
+  }
+}
+
+function isEscapedWithBackslash(text: string, index: number): boolean {
+  let backslashCount = 0;
+  for (let i = index - 1; i >= 0 && text[i] === "\\"; i -= 1) {
+    backslashCount += 1;
+  }
+  return backslashCount % 2 === 1;
+}
+
+function bindMysqlParameters(
+  sql: string,
+  args: Record<string, unknown> | undefined
+): { sql: string; values: unknown[] } {
+  if (!args || Object.keys(args).length === 0) {
+    return { sql, values: [] };
+  }
+
+  const values: unknown[] = [];
+  let text = "";
+
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inBacktick = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  const isIdentifierStart = (ch: string | undefined): boolean => !!ch && /[A-Za-z_]/.test(ch);
+  const isIdentifierChar = (ch: string | undefined): boolean => !!ch && /[A-Za-z0-9_]/.test(ch);
+
+  for (let i = 0; i < sql.length; i += 1) {
+    const char = sql[i];
+    const ahead = sql.slice(i);
+
+    if (inLineComment) {
+      text += char;
+      if (char === "\n") {
+        inLineComment = false;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (ahead.startsWith("*/")) {
+        text += "*/";
+        i += 1;
+        inBlockComment = false;
+      } else {
+        text += char;
+      }
+      continue;
+    }
+
+    if (inSingleQuote) {
+      text += char;
+      if (char === "'" && sql[i + 1] === "'") {
+        text += "'";
+        i += 1;
+      } else if (char === "'" && !isEscapedWithBackslash(sql, i)) {
+        inSingleQuote = false;
+      }
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      text += char;
+      if (char === '"' && sql[i + 1] === '"') {
+        text += '"';
+        i += 1;
+      } else if (char === '"' && !isEscapedWithBackslash(sql, i)) {
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+
+    if (inBacktick) {
+      text += char;
+      if (char === "`" && sql[i + 1] === "`") {
+        text += "`";
+        i += 1;
+      } else if (char === "`") {
+        inBacktick = false;
+      }
+      continue;
+    }
+
+    if (ahead.startsWith("--")) {
+      text += "--";
+      i += 1;
+      inLineComment = true;
+      continue;
+    }
+
+    if (char === "#") {
+      text += char;
+      inLineComment = true;
+      continue;
+    }
+
+    if (ahead.startsWith("/*")) {
+      text += "/*";
+      i += 1;
+      inBlockComment = true;
+      continue;
+    }
+
+    if (char === "'") {
+      text += char;
+      inSingleQuote = true;
+      continue;
+    }
+
+    if (char === '"') {
+      text += char;
+      inDoubleQuote = true;
+      continue;
+    }
+
+    if (char === "`") {
+      text += char;
+      inBacktick = true;
+      continue;
+    }
+
+    if (char === ":" && sql[i - 1] !== ":" && isIdentifierStart(sql[i + 1])) {
+      let j = i + 1;
+      while (isIdentifierChar(sql[j])) {
+        j += 1;
+      }
+      const name = sql.slice(i + 1, j);
+      if (!(name in args)) {
+        throw new DatabaseError(`Missing value for SQL parameter :${name}`);
+      }
+      text += "?";
+      values.push(args[name]);
+      i = j - 1;
+      continue;
+    }
+
+    text += char;
+  }
+
+  return { sql: text, values };
+}
+
+async function executeMysql(
+  connectionString: string,
+  sql: string,
+  args: Record<string, unknown> | undefined,
+  expectResult: boolean,
+  limit: number
+): Promise<ExecuteResultRead | ExecuteResultWrite> {
+  const pool = getMysqlPool(connectionString);
+  const connection = await pool.getConnection();
+  try {
+    // Convert :param to ? placeholders for MySQL
+    const { sql: processedSql, values: paramValues } = bindMysqlParameters(sql, args);
+    const [result] = await connection.query(processedSql, paramValues);
+
+    if (expectResult) {
+      const rows = result as mysql.RowDataPacket[];
+      const truncated = rows.length > limit;
+      return {
+        rows: rows.slice(0, limit) as Record<string, unknown>[],
+        truncated,
+      };
+    }
+
+    const writeResult = result as mysql.ResultSetHeader;
+    return { rowcount: writeResult.affectedRows ?? 0 };
+  } catch (error) {
+    throw new DatabaseError((error as Error).message);
+  } finally {
+    connection.release();
   }
 }
 
@@ -436,6 +758,9 @@ export async function explainQuery(
   }
   if (config.driver === "sqlite") {
     return explainSqlite(config.sqlitePath!, sql, args, analyze);
+  }
+  if (config.driver === "mysql") {
+    return explainMysql(config.connectionString, sql, args, analyze);
   }
   throw new DatabaseError("Unsupported database driver");
 }
@@ -480,7 +805,7 @@ async function explainSqlite(
     // before running EXPLAIN, since EXPLAIN doesn't bind parameters
     let processedSql = sql;
     let paramValues: unknown[] = [];
-    
+
     if (args && Object.keys(args).length > 0) {
       const replacement = replaceSqliteNamedParameters(sql, args);
       processedSql = replacement.sql;
@@ -495,6 +820,55 @@ async function explainSqlite(
     };
   } catch (error) {
     throw new DatabaseError((error as Error).message);
+  }
+}
+
+async function explainMysql(
+  connectionString: string,
+  sql: string,
+  args: Record<string, unknown> | undefined,
+  analyze: boolean
+): Promise<ExplainResult> {
+  const pool = getMysqlPool(connectionString);
+  const connection = await pool.getConnection();
+  try {
+    // Convert :param to ? placeholders for MySQL
+    const { sql: processedSql, values: paramValues } = bindMysqlParameters(sql, args);
+
+    // MySQL supports EXPLAIN and EXPLAIN ANALYZE (8.0.18+)
+    const explainFormat = analyze ? "EXPLAIN ANALYZE" : "EXPLAIN FORMAT=JSON";
+    const explainSql = `${explainFormat} ${processedSql}`;
+
+    const [rows] = await connection.query(explainSql, paramValues);
+
+    // For EXPLAIN FORMAT=JSON, MySQL returns a single row with a JSON string
+    // For EXPLAIN ANALYZE, it returns the execution plan as text
+    if (analyze) {
+      // EXPLAIN ANALYZE returns RowDataPacket[]
+      const result = rows as mysql.RowDataPacket[];
+      return {
+        plan: result as Record<string, unknown>[],
+        query: sql,
+      };
+    } else {
+      // EXPLAIN FORMAT=JSON returns a single row with EXPLAIN column containing JSON
+      const result = rows as mysql.RowDataPacket[];
+      const jsonPlan = result[0]?.EXPLAIN;
+      if (typeof jsonPlan === "string") {
+        return {
+          plan: [JSON.parse(jsonPlan) as Record<string, unknown>],
+          query: sql,
+        };
+      }
+      return {
+        plan: result as Record<string, unknown>[],
+        query: sql,
+      };
+    }
+  } catch (error) {
+    throw new DatabaseError((error as Error).message);
+  } finally {
+    connection.release();
   }
 }
 

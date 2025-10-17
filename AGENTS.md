@@ -4,11 +4,20 @@
 - `src/` holds the TypeScript sources for:
   - `config.ts` - Configuration management from env vars and CLI args
   - `sqlGuard.ts` - SQL validation and security enforcement
-  - `db.ts` - Database connection and query execution (SQLite/PostgreSQL)
+  - `db.ts` - Database connection and query execution (SQLite/PostgreSQL/MySQL/MariaDB)
   - `mcp-server.ts` - MCP stdio server implementation (primary)
   - `http-server.ts` - HTTP server implementation (legacy/optional)
   - `routes.ts` - HTTP route handlers
   - `index.ts` - Entry point and mode router (stdio vs HTTP)
+- `tests/` contains comprehensive test suites for all supported databases:
+  - `test-sqlite.ts` - SQLite in-memory tests
+  - `test-postgres.ts` - PostgreSQL integration tests
+  - `test-mysql.ts` - MySQL integration tests
+  - `test-mariadb.ts` - MariaDB integration tests
+  - `run-all-tests.ts` - Test orchestrator
+  - `README.md` - Detailed testing documentation
+- `.github/workflows/` contains CI/CD configurations:
+  - `ci.yml` - GitHub Actions workflow for lint, typecheck, build, and test
 - `dist/` contains emitted JavaScript; edit only the TypeScript originals.
 - Operational assets: `mcp.json` exposes MCP tool metadata, `openapi.yaml` documents HTTP API, `Dockerfile` / `docker-compose.yml` support container runs.
 - Generated artifacts (logs, transient DB files) should stay outside the repo or be ignored via `.gitignore`.
@@ -23,17 +32,51 @@ npm run lint           # eslint over all TypeScript sources
 npm run typecheck      # strict tsc pass without emitting files
 ```
 
+## Build, Test, and Development Commands
+```bash
+npm install            # install dependencies
+npm run build          # transpile TypeScript to dist/
+npm run dev            # hot-reload development server via tsx
+npm start              # run the MCP stdio server from dist/
+npm run lint           # eslint over all TypeScript sources
+npm run typecheck      # strict tsc pass without emitting files
+
+# Testing commands
+npm test               # run all database tests (requires Docker for PostgreSQL/MySQL/MariaDB)
+npm run test:docker    # run all tests in Docker (recommended - auto cleanup)
+npm run test:sqlite    # run SQLite tests only (no Docker required)
+npm run test:postgres  # run PostgreSQL tests (requires running PostgreSQL container)
+npm run test:mysql     # run MySQL tests (requires running MySQL container)
+npm run test:mariadb   # run MariaDB tests (requires running MariaDB container)
+```
+
 ### Testing
 ```bash
-# Test MCP stdio mode (default)
+# Recommended: Run all tests in Docker with auto cleanup
+npm run test:docker
+
+# Or manually manage Docker containers
+docker compose up -d postgres mysql mariadb  # Start databases
+npm test                                     # Run all test suites
+docker compose down -v                       # Stop and clean up
+
+# Run individual test suites
+npm run test:sqlite      # SQLite (in-memory, no Docker needed)
+npm run test:postgres    # PostgreSQL tests
+npm run test:mysql       # MySQL tests
+npm run test:mariadb     # MariaDB tests
+
+# Manual testing via MCP stdio mode
 node dist/index.js --host sqlite:///./dev.db
 
 # Test HTTP mode
 node dist/index.js --host sqlite:///./dev.db --http-mode --port 8080
 
-# Docker testing
-docker-compose up --build
+# Clean up Docker resources
+docker-compose down -v
 ```
+
+See [tests/README.md](tests/README.md) for comprehensive testing documentation.
 
 ## Coding Style & Naming Conventions
 - TypeScript code follows 2-space indentation and ES module syntax (`type: "module"` in `package.json`).
@@ -42,10 +85,18 @@ docker-compose up --build
 - Favor small, pure helpers in `src/` and keep request-handling logic inside `routes.ts`.
 
 ## Testing Guidelines
-- Manual testing via MCP stdio protocol or HTTP endpoints
-- For SQL guard changes, validate via `db_execute` tool against both SQLite (`sqlite:///./dev.db`) and Postgres using `docker-compose`
+- Automated test suites are available in the `tests/` directory for all supported databases
+- Each test suite covers: URL normalization, table operations, CRUD operations, query features, and database-specific features
+- Tests use Docker containers for PostgreSQL, MySQL, and MariaDB; SQLite uses in-memory database
+- Run tests before committing changes: `npm test`
+- For SQL guard changes, validate via automated tests and manual `db_execute` tool testing
 - Test both MCP stdio mode (default) and HTTP mode (`--http-mode`)
-- Capture regression scenarios in Markdown or issue comments; align scenario names with the affected module (e.g., `sqlGuard-allowlist-quoted`)
+- All tests automatically clean up their data (drop test tables)
+- See [tests/README.md](tests/README.md) for detailed testing procedures and troubleshooting
+- **CI/CD**: GitHub Actions automatically runs lint, typecheck, build, and all tests on push/PR
+  - Workflow file: `.github/workflows/ci.yml`
+  - Tests run against PostgreSQL 16, MySQL 8.0, MariaDB 11.2 in service containers
+  - All checks must pass before merging
 
 ## MCP Tools (stdio mode)
 The server exposes four MCP tools:

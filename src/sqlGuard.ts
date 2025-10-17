@@ -2,7 +2,8 @@ const READ_KEYWORDS = new Set(["SELECT", "WITH"]);
 const WRITE_KEYWORDS = new Set(["INSERT", "UPDATE", "DELETE", "MERGE", "TRUNCATE"]);
 const DDL_KEYWORDS = new Set(["CREATE", "ALTER", "DROP", "RENAME", "REINDEX", "VACUUM"]);
 
-const IDENTIFIER_PATTERN = String.raw`(?:"(?:[^"]|"")*"|[A-Za-z_][\w$]*)`;
+// Support PostgreSQL ("), MySQL (`), and standard identifiers
+const IDENTIFIER_PATTERN = String.raw`(?:"(?:[^"]|"")*"|` + "`" + String.raw`(?:[^` + "`" + String.raw`]|` + "``" + String.raw`)*` + "`" + String.raw`|[A-Za-z_][\w$]*)`;
 const TABLE_TOKEN_PATTERN = new RegExp(`(${IDENTIFIER_PATTERN}\\.${IDENTIFIER_PATTERN})`, "g");
 const TABLE_SEARCH_PATTERNS = [
   new RegExp(`\\bfrom\\s+(${IDENTIFIER_PATTERN}(?:\\.${IDENTIFIER_PATTERN})?)`, "gi"),
@@ -26,19 +27,31 @@ function splitQualifiedIdentifier(raw: string): string[] {
   const trimmed = raw.trim();
   const parts: string[] = [];
   let start = 0;
-  let inQuotes = false;
+  let inDoubleQuotes = false;
+  let inBackticks = false;
 
   for (let index = 0; index < trimmed.length; index += 1) {
     const char = trimmed[index];
+    // Handle PostgreSQL double quotes
     if (char === '"') {
-      if (inQuotes && trimmed[index + 1] === '"') {
+      if (inDoubleQuotes && trimmed[index + 1] === '"') {
         index += 1;
         continue;
       }
-      inQuotes = !inQuotes;
+      inDoubleQuotes = !inDoubleQuotes;
       continue;
     }
-    if (char === "." && !inQuotes) {
+    // Handle MySQL backticks
+    if (char === "`") {
+      if (inBackticks && trimmed[index + 1] === "`") {
+        index += 1;
+        continue;
+      }
+      inBackticks = !inBackticks;
+      continue;
+    }
+    // Split on dot only when not inside quotes
+    if (char === "." && !inDoubleQuotes && !inBackticks) {
       parts.push(trimmed.slice(start, index));
       start = index + 1;
     }
@@ -50,8 +63,13 @@ function splitQualifiedIdentifier(raw: string): string[] {
 
 function normalizeIdentifier(identifier: string): string {
   const trimmed = identifier.trim();
+  // PostgreSQL double quotes
   if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) {
     return trimmed.slice(1, -1).replace(/""/g, '"').toLowerCase();
+  }
+  // MySQL backticks
+  if (trimmed.startsWith("`") && trimmed.endsWith("`") && trimmed.length >= 2) {
+    return trimmed.slice(1, -1).replace(/``/g, "`").toLowerCase();
   }
   return trimmed.toLowerCase();
 }

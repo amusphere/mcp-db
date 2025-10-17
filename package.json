@@ -1,7 +1,7 @@
 {
   "name": "@amusphere/mcp-db",
-  "version": "0.2.0",
-  "description": "Model Context Protocol (MCP) server for secure database access. Query SQLite and PostgreSQL databases with AI assistants like Claude and Codex.",
+  "version": "0.3.0",
+  "description": "Model Context Protocol (MCP) server for secure database access. Query SQLite, PostgreSQL, MySQL, and MariaDB databases with AI assistants like Claude and Codex.",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
@@ -13,7 +13,13 @@
     "dev": "tsx watch src/index.ts",
     "lint": "eslint . --ext .ts",
     "typecheck": "tsc --noEmit",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "test": "npx tsx tests/run-all-tests.ts",
+    "test:docker": "docker compose run --rm test-runner",
+    "test:sqlite": "npx tsx tests/test-sqlite.ts",
+    "test:postgres": "POSTGRES_URL=postgresql://mcp:password@localhost:5432/mcp npx tsx tests/test-postgres.ts",
+    "test:mysql": "MYSQL_URL=mysql://mcp:password@localhost:3306/mcp npx tsx tests/test-mysql.ts",
+    "test:mariadb": "MARIADB_URL=mariadb://mcp:password@localhost:3307/mcp npx tsx tests/test-mariadb.ts"
   },
   "author": "Shuto",
   "license": "MIT",
@@ -24,12 +30,14 @@
     "sql",
     "sqlite",
     "postgresql",
+    "mysql",
+    "mariadb",
     "llm",
     "ai-tools"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/amusphere/mcp-db.git"
+    "url": "git+https://github.com/amusphere/mcp-db.git"
   },
   "homepage": "https://github.com/amusphere/mcp-db#readme",
   "bugs": {
@@ -48,6 +56,7 @@
     "@modelcontextprotocol/sdk": "^1.20.1",
     "dotenv": "^16.4.5",
     "fastify": "^4.27.2",
+    "mysql2": "^3.15.2",
     "pg": "^8.11.5",
     "sqlite": "^4.2.1",
     "sqlite3": "^5.1.7"

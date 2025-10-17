@@ -16,6 +16,7 @@ import {
   explainQuery,
   listTables,
   normalizeDatabaseUrl,
+  closeAllConnections,
   type NormalizedDatabaseConfig,
 } from "./db.js";
 import {
@@ -384,6 +385,22 @@ async function main() {
 
   // Log to stderr so it doesn't interfere with MCP protocol on stdout
   console.error("MCP Database Server running on stdio");
+
+  // Setup graceful shutdown handlers
+  const shutdown = async (signal: string) => {
+    console.error(`\nReceived ${signal}, shutting down gracefully...`);
+    try {
+      await closeAllConnections();
+      console.error("All database connections closed");
+      process.exit(0);
+    } catch (error) {
+      console.error("Error during shutdown:", error);
+      process.exit(1);
+    }
+  };
+
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
 }
 
 main().catch((error) => {

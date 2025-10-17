@@ -1,14 +1,15 @@
 # MCP Database Server
 
 [![npm version](https://img.shields.io/npm/v/@amusphere/mcp-db.svg)](https://www.npmjs.com/package/@amusphere/mcp-db)
+[![CI](https://github.com/amusphere/mcp-db/actions/workflows/ci.yml/badge.svg)](https://github.com/amusphere/mcp-db/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Model Context Protocol (MCP) server that provides secure database access for AI assistants and LLM-based tools. Query SQLite and PostgreSQL databases with built-in safety controls, query validation, and audit logging.
+A Model Context Protocol (MCP) server that provides secure database access for AI assistants and LLM-based tools. Query SQLite, PostgreSQL, MySQL, and MariaDB databases with built-in safety controls, query validation, and audit logging.
 
 ## Features
 
 - 🔒 **Secure by Default**: Read-only mode with granular permission controls
-- 🗄️ **Multi-Database**: Support for SQLite and PostgreSQL
+- 🗄️ **Multi-Database**: Support for SQLite, PostgreSQL, MySQL, and MariaDB
 - 🛡️ **SQL Validation**: Automatic query validation and injection prevention
 - 📊 **Table Allowlisting**: Restrict access to specific tables
 - ⏱️ **Query Timeouts**: Prevent long-running queries
@@ -139,6 +140,35 @@ Development mode with hot-reload:
 npm run dev
 ```
 
+### Testing
+
+Comprehensive tests are available for all supported databases. See [tests/README.md](tests/README.md) for detailed testing documentation.
+
+**Quick test commands:**
+
+```bash
+# Run all tests (requires Docker)
+npm test
+
+# Run individual database tests
+npm run test:sqlite      # No Docker required
+npm run test:postgres    # Requires PostgreSQL container
+npm run test:mysql       # Requires MySQL container
+npm run test:mariadb     # Requires MariaDB container
+```
+
+**Docker-based testing:**
+
+```bash
+# Run all tests in Docker (recommended - auto cleanup)
+npm run test:docker
+
+# Or manually manage containers
+docker compose up -d postgres mysql mariadb  # Start databases
+npm test                                     # Run tests
+docker compose down -v                       # Stop and clean up
+```
+
 ### HTTP Server Mode (Legacy)
 
 For backwards compatibility with HTTP-based integrations:
@@ -183,11 +213,19 @@ postgresql://username:password@host:port/database
 postgresql://localhost/mydb        # Local with defaults
 ```
 
-**PostgreSQL:**
+**MySQL:**
 ```
-postgresql://username:password@host:port/database
-postgresql://localhost/mydb        # Local with defaults
+mysql://username:password@host:port/database
+mysql://root:password@localhost:3306/mydb
 ```
+
+**MariaDB:**
+```
+mariadb://username:password@host:port/database
+mariadb://root:password@localhost:3306/mydb
+```
+
+Note: MariaDB URLs are automatically converted to MySQL format internally.
 
 ### Environment Variables
 
