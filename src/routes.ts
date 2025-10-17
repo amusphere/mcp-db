@@ -169,6 +169,7 @@ export function registerRoutes(app: FastifyInstance): void {
           category: "metadata",
           db: config.driver,
           duration_ms,
+          rowcount: filtered.length,
           tables: filtered.length,
         });
         await reply.send({ tables: filtered });
