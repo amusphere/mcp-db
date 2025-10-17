@@ -22,6 +22,7 @@ const { values } = parseArgs({
     "require-api-key": { type: "boolean" },
     "api-key": { type: "string" },
     "http-mode": { type: "boolean" },
+    metrics: { type: "boolean" },
   },
   allowPositionals: true,
 });
@@ -43,15 +44,16 @@ function showHelp(): void {
     `  --require-api-key        Require X-API-Key header (HTTP mode only)\n` +
     `  --api-key <value>        Expected API key when required\n` +
     `  --http-mode              Run as HTTP server instead of MCP stdio\n` +
+    `  --metrics                Enable Prometheus metrics endpoint (HTTP mode only)\n` +
     `  --help, -h               Show this message\n\n` +
     `Environment Variables:\n` +
-    `  DB_URL, ALLOW_WRITES, ALLOW_DDL, ALLOWLIST_TABLES, etc.\n` +
+    `  DB_URL, ALLOW_WRITES, ALLOW_DDL, ALLOWLIST_TABLES, METRICS_ENABLED, etc.\n` +
     `  (Command-line options override environment variables)\n\n` +
     `Examples:\n` +
     `  # MCP stdio mode (default):\n` +
     `  npx @amusphere/mcp-db --host sqlite:///./dev.db\n\n` +
-    `  # HTTP server mode:\n` +
-    `  npx @amusphere/mcp-db --host sqlite:///./dev.db --http-mode\n`;
+    `  # HTTP server mode with metrics:\n` +
+    `  npx @amusphere/mcp-db --host sqlite:///./dev.db --http-mode --metrics\n`;
   console.log(message);
 }
 
@@ -96,6 +98,10 @@ if (values["require-api-key"] !== undefined) {
 
 if (values["api-key"]) {
   process.env.API_KEY = values["api-key"];
+}
+
+if (values.metrics !== undefined) {
+  process.env.METRICS_ENABLED = String(values.metrics);
 }
 
 // Run in HTTP mode or MCP stdio mode

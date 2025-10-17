@@ -27,8 +27,10 @@ import {
   validateAllowlist,
 } from "./sqlGuard.js";
 import { logger, generateTraceId, generateSpanId } from "./logger.js";
+import { initializeMetrics, recordQueryDuration, recordError } from "./metrics.js";
 
 const settings = getSettings();
+initializeMetrics({ enabled: settings.metricsEnabled });
 const normalizedAllowlist = new Set(settings.allowlistTables.map((item) => item.toLowerCase()));
 
 function allowlistAliases(table: string): Set<string> {
@@ -219,6 +221,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
                 return false;
               });
         const duration_ms = Date.now() - startTime;
+        recordQueryDuration(name, config.driver, "metadata", duration_ms / 1000);
         logger.info("Tool call completed", {
           trace_id,
           span_id,
@@ -249,6 +252,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           settings.queryTimeoutMs
         );
         const duration_ms = Date.now() - startTime;
+        recordQueryDuration(name, config.driver, "metadata", duration_ms / 1000);
         logger.info("Tool call completed", {
           trace_id,
           span_id,
@@ -333,6 +337,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
 
         const duration_ms = Date.now() - startTime;
         const rows = "rows" in result ? result.rows.length : result.rowcount;
+        recordQueryDuration(name, config.driver, category.toString(), duration_ms / 1000);
         logger.info("Tool call completed", {
           trace_id,
           span_id,
@@ -377,6 +382,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         );
 
         const duration_ms = Date.now() - startTime;
+        recordQueryDuration(name, config.driver, "explain", duration_ms / 1000);
         logger.info("Tool call completed", {
           trace_id,
           span_id,
@@ -402,6 +408,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
   } catch (error) {
     const duration_ms = Date.now() - startTime;
     if (error instanceof Error && error.message === "timeout") {
+      recordError(name, "unknown", "timeout");
       logger.error("Tool call timed out", {
         trace_id,
         span_id,
@@ -420,6 +427,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
       };
     }
     if (error instanceof SQLValidationError || error instanceof DatabaseError) {
+      const errorType = error instanceof SQLValidationError ? "validation" : "database";
+      recordError(name, "unknown", errorType);
       logger.error("Tool call failed", {
         trace_id,
         span_id,
@@ -437,6 +446,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         isError: true,
       };
     }
+    recordError(name, "unknown", "unexpected");
     logger.error("Tool call failed with unexpected error", {
       trace_id,
       span_id,

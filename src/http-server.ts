@@ -2,12 +2,25 @@ import Fastify from "fastify";
 import { registerRoutes } from "./routes.js";
 import { closeAllConnections } from "./db.js";
 import { logger } from "./logger.js";
+import { getSettings } from "./config.js";
+import { initializeMetrics, getMetrics, isMetricsEnabled } from "./metrics.js";
+
+const settings = getSettings();
+initializeMetrics({ enabled: settings.metricsEnabled });
 
 const app = Fastify({ logger: false });
 
 registerRoutes(app);
 
 app.get("/healthz", () => ({ status: "ok" }));
+
+// Prometheus metrics endpoint
+if (isMetricsEnabled()) {
+  app.get("/metrics", async (request, reply) => {
+    const metrics = await getMetrics();
+    await reply.type("text/plain").send(metrics);
+  });
+}
 
 const port = Number(process.env.PORT ?? "8080");
 

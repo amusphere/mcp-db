@@ -17,6 +17,7 @@ import {
   validateAllowlist,
 } from "./sqlGuard.js";
 import { logger, generateTraceId, generateSpanId, type LogContext } from "./logger.js";
+import { recordQueryDuration, recordError } from "./metrics.js";
 
 const settings = getSettings();
 const normalizedAllowlist = new Set(settings.allowlistTables.map((item) => item.toLowerCase()));
@@ -162,15 +163,18 @@ export function registerRoutes(app: FastifyInstance): void {
                 }
                 return false;
               });
+        const duration_ms = Date.now() - start;
+        recordQueryDuration("db.tables", config.driver, "metadata", duration_ms / 1000);
         auditLog(trace_id, span_id, "db.tables", {
           category: "metadata",
           db: config.driver,
-          duration_ms: Date.now() - start,
+          duration_ms,
           tables: filtered.length,
         });
         await reply.send({ tables: filtered });
       } catch (error) {
         if ((error as Error).message === "timeout") {
+          recordError("db.tables", "unknown", "timeout");
           auditLog(trace_id, span_id, "db.tables", {
             category: "metadata",
             duration_ms: Date.now() - start,
@@ -179,6 +183,7 @@ export function registerRoutes(app: FastifyInstance): void {
           await reply.status(504).send({ detail: "Query timed out" });
           return;
         }
+        recordError("db.tables", "unknown", "error");
         const message = (error as Error).message;
         auditLog(trace_id, span_id, "db.tables", {
           category: "metadata",
@@ -266,15 +271,18 @@ export function registerRoutes(app: FastifyInstance): void {
           await reply.status(404).send({ detail: "Table not found" });
           return;
         }
+        const duration_ms = Date.now() - start;
+        recordQueryDuration("db.describe_table", config.driver, "metadata", duration_ms / 1000);
         auditLog(trace_id, span_id, "db.describe_table", {
           category: "metadata",
           db: config.driver,
-          duration_ms: Date.now() - start,
+          duration_ms,
           columns: columns.length,
         });
         await reply.send({ columns });
       } catch (error) {
         if ((error as Error).message === "timeout") {
+          recordError("db.describe_table", "unknown", "timeout");
           auditLog(trace_id, span_id, "db.describe_table", {
             category: "metadata",
             duration_ms: Date.now() - start,
@@ -283,6 +291,7 @@ export function registerRoutes(app: FastifyInstance): void {
           await reply.status(504).send({ detail: "Query timed out" });
           return;
         }
+        recordError("db.describe_table", "unknown", "error");
         const message = error instanceof DatabaseError ? error.message : (error as Error).message;
         auditLog(trace_id, span_id, "db.describe_table", {
           category: "metadata",
@@ -402,12 +411,14 @@ export function registerRoutes(app: FastifyInstance): void {
           executeSql(config, normalizedSql, body.args, expectResult, effectiveLimit),
           settings.queryTimeoutMs
         );
+        const duration_ms = Date.now() - start;
+        recordQueryDuration("db.execute", config.driver, category.valueOf(), duration_ms / 1000);
         if (expectResult) {
           const readResult = result as { rows: Record<string, unknown>[]; truncated: boolean };
           auditLog(trace_id, span_id, "db.execute", {
             category: category.valueOf(),
             db: config.driver,
-            duration_ms: Date.now() - start,
+            duration_ms,
             rows: readResult.rows.length,
             truncated: readResult.truncated,
           });
@@ -417,13 +428,14 @@ export function registerRoutes(app: FastifyInstance): void {
           auditLog(trace_id, span_id, "db.execute", {
             category: category.valueOf(),
             db: config.driver,
-            duration_ms: Date.now() - start,
+            duration_ms,
             rowcount: writeResult.rowcount,
           });
           await reply.send(writeResult);
         }
       } catch (error) {
         if ((error as Error).message === "timeout") {
+          recordError("db.execute", config.driver, "timeout");
           auditLog(trace_id, span_id, "db.execute", {
             category: category.valueOf(),
             duration_ms: Date.now() - start,
@@ -432,6 +444,7 @@ export function registerRoutes(app: FastifyInstance): void {
           await reply.status(504).send({ detail: "Query timed out" });
           return;
         }
+        recordError("db.execute", config.driver, "error");
         const message = error instanceof DatabaseError ? error.message : (error as Error).message;
         auditLog(trace_id, span_id, "db.execute", {
           category: category.valueOf(),
@@ -501,15 +514,18 @@ export function registerRoutes(app: FastifyInstance): void {
           explainQuery(config, normalizedSql, body.args, body.analyze ?? false),
           settings.queryTimeoutMs
         );
+        const duration_ms = Date.now() - start;
+        recordQueryDuration("db.explain", config.driver, "explain", duration_ms / 1000);
         auditLog(trace_id, span_id, "db.explain", {
           category: "metadata",
           db: config.driver,
-          duration_ms: Date.now() - start,
+          duration_ms,
           analyze: body.analyze ?? false,
         });
         await reply.send(result);
       } catch (error) {
         if ((error as Error).message === "timeout") {
+          recordError("db.explain", "unknown", "timeout");
           auditLog(trace_id, span_id, "db.explain", {
             category: "metadata",
             duration_ms: Date.now() - start,
@@ -518,6 +534,7 @@ export function registerRoutes(app: FastifyInstance): void {
           await reply.status(504).send({ detail: "Query timed out" });
           return;
         }
+        recordError("db.explain", "unknown", "error");
         const message = error instanceof DatabaseError ? error.message : (error as Error).message;
         auditLog(trace_id, span_id, "db.explain", {
           category: "metadata",
