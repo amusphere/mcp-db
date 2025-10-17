@@ -93,10 +93,15 @@ See [tests/README.md](tests/README.md) for comprehensive testing documentation.
 - Test both MCP stdio mode (default) and HTTP mode (`--http-mode`)
 - All tests automatically clean up their data (drop test tables)
 - See [tests/README.md](tests/README.md) for detailed testing procedures and troubleshooting
-- **CI/CD**: GitHub Actions automatically runs lint, typecheck, build, and all tests on push/PR
+- **CI/CD**: GitHub Actions automatically runs security scans, lint, typecheck, build, and all tests on push/PR
   - Workflow file: `.github/workflows/ci.yml`
+  - Security scanning includes:
+    - Gitleaks for secret detection (no additional setup required)
+    - Trivy for filesystem and dependency vulnerability scanning
+    - Results uploaded to GitHub Security tab via SARIF format
   - Tests run against PostgreSQL 16, MySQL 8.0, MariaDB 11.2 in service containers
   - All checks must pass before merging
+  - No additional tokens or secrets required - all security tools use GitHub's built-in GITHUB_TOKEN
 
 ## MCP Tools (stdio mode)
 The server exposes four MCP tools:
