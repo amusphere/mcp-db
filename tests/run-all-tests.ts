@@ -24,19 +24,25 @@ const tests: TestConfig[] = [
     name: "PostgreSQL",
     script: "npx tsx tests/test-postgres.ts",
     envVar: "POSTGRES_URL",
-    defaultUrl: "postgresql://mcp:password@localhost:5432/mcp",
+    defaultUrl: process.env.DOCKER_ENV
+      ? "postgresql://mcp:password@postgres:5432/mcp"
+      : "postgresql://mcp:password@localhost:5432/mcp",
   },
   {
     name: "MySQL",
     script: "npx tsx tests/test-mysql.ts",
     envVar: "MYSQL_URL",
-    defaultUrl: "mysql://mcp:password@localhost:3306/mcp",
+    defaultUrl: process.env.DOCKER_ENV
+      ? "mysql://mcp:password@mysql:3306/mcp"
+      : "mysql://mcp:password@localhost:3306/mcp",
   },
   {
     name: "MariaDB",
     script: "npx tsx tests/test-mariadb.ts",
     envVar: "MARIADB_URL",
-    defaultUrl: "mariadb://mcp:password@localhost:3307/mcp",
+    defaultUrl: process.env.DOCKER_ENV
+      ? "mariadb://mcp:password@mariadb:3306/mcp"
+      : "mariadb://mcp:password@localhost:3307/mcp",
   },
 ];
 

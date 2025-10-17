@@ -230,7 +230,13 @@ export async function listTables(config: NormalizedDatabaseConfig, schema?: stri
 
       query += " ORDER BY table_schema, table_name";
       const [rows] = await connection.query<mysql.RowDataPacket[]>(query, params);
-      return rows.map((row) => `${row.TABLE_SCHEMA as string}.${row.TABLE_NAME as string}`);
+
+      return rows.map((row) => {
+        // MariaDB returns lowercase field names, MySQL returns uppercase
+        const schemaName = (row.TABLE_SCHEMA ?? row.table_schema) as string;
+        const tableName = (row.TABLE_NAME ?? row.table_name) as string;
+        return `${schemaName}.${tableName}`;
+      });
     } catch (error) {
       throw new DatabaseError((error as Error).message);
     } finally {
@@ -318,10 +324,12 @@ export async function describeTable(
         "SELECT column_name, data_type, is_nullable FROM information_schema.columns " +
         "WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position";
       const [rows] = await connection.query<mysql.RowDataPacket[]>(query, [schemaName, resolvedTable]);
+
       return rows.map((row) => ({
-        column_name: row.COLUMN_NAME as string,
-        data_type: row.DATA_TYPE as string,
-        is_nullable: row.IS_NULLABLE === "YES",
+        // MariaDB returns lowercase field names, MySQL returns uppercase
+        column_name: (row.COLUMN_NAME ?? row.column_name) as string,
+        data_type: (row.DATA_TYPE ?? row.data_type) as string,
+        is_nullable: (row.IS_NULLABLE ?? row.is_nullable) === "YES",
       }));
     } catch (error) {
       throw new DatabaseError((error as Error).message);
