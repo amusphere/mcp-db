@@ -254,8 +254,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         validateAllowlist(validated, settings.allowlistTables);
 
         const expectResult = category === StatementCategory.READ;
-        const rowLimit =
-          typeof args?.row_limit === "number" ? args.row_limit : settings.maxRows;
+        let rowLimit = settings.maxRows;
+        if (args?.row_limit !== undefined) {
+          const rawLimit = args.row_limit;
+          if (
+            typeof rawLimit !== "number" ||
+            !Number.isInteger(rawLimit) ||
+            rawLimit <= 0
+          ) {
+            throw new SQLValidationError("row_limit must be a positive integer");
+          }
+          rowLimit = Math.min(rawLimit, settings.maxRows);
+        }
 
         const result = await withTimeout(
           executeSql(
@@ -282,6 +292,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error) {
+    if (error instanceof Error && error.message === "timeout") {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ detail: "Query timed out" }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
     if (error instanceof SQLValidationError || error instanceof DatabaseError) {
       return {
         content: [
