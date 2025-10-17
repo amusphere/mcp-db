@@ -3,12 +3,12 @@
 [![npm version](https://img.shields.io/npm/v/@amusphere/mcp-db.svg)](https://www.npmjs.com/package/@amusphere/mcp-db)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Model Context Protocol (MCP) server that provides secure database access for AI assistants and LLM-based tools. Query SQLite and PostgreSQL databases with built-in safety controls, query validation, and audit logging.
+A Model Context Protocol (MCP) server that provides secure database access for AI assistants and LLM-based tools. Query SQLite, PostgreSQL, MySQL, and MariaDB databases with built-in safety controls, query validation, and audit logging.
 
 ## Features
 
 - 🔒 **Secure by Default**: Read-only mode with granular permission controls
-- 🗄️ **Multi-Database**: Support for SQLite and PostgreSQL
+- 🗄️ **Multi-Database**: Support for SQLite, PostgreSQL, MySQL, and MariaDB
 - 🛡️ **SQL Validation**: Automatic query validation and injection prevention
 - 📊 **Table Allowlisting**: Restrict access to specific tables
 - ⏱️ **Query Timeouts**: Prevent long-running queries
@@ -183,11 +183,19 @@ postgresql://username:password@host:port/database
 postgresql://localhost/mydb        # Local with defaults
 ```
 
-**PostgreSQL:**
+**MySQL:**
 ```
-postgresql://username:password@host:port/database
-postgresql://localhost/mydb        # Local with defaults
+mysql://username:password@host:port/database
+mysql://root:password@localhost:3306/mydb
 ```
+
+**MariaDB:**
+```
+mariadb://username:password@host:port/database
+mariadb://root:password@localhost:3306/mydb
+```
+
+Note: MariaDB URLs are automatically converted to MySQL format internally.
 
 ### Environment Variables
 
