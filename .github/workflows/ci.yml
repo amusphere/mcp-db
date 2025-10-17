@@ -22,6 +22,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true  # Don't fail on potential false positives
 
+      - name: Run OSV-Scanner (dependency vulnerability scanning)
+        uses: google/osv-scanner-action@v1
+        with:
+          scan-args: '.'
+        continue-on-error: true  # Don't fail, just report
       - name: Run Trivy (filesystem vulnerability scanning)
         uses: aquasecurity/trivy-action@0.28.0
         with:
