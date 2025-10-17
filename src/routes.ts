@@ -174,7 +174,7 @@ export function registerRoutes(app: FastifyInstance): void {
         await reply.send({ tables: filtered });
       } catch (error) {
         if ((error as Error).message === "timeout") {
-          recordError("db.tables", "unknown", "timeout");
+          recordError("db.tables", config.driver, "timeout");
           auditLog(trace_id, span_id, "db.tables", {
             category: "metadata",
             duration_ms: Date.now() - start,
@@ -183,7 +183,7 @@ export function registerRoutes(app: FastifyInstance): void {
           await reply.status(504).send({ detail: "Query timed out" });
           return;
         }
-        recordError("db.tables", "unknown", "error");
+        recordError("db.tables", config.driver, "error");
         const message = (error as Error).message;
         auditLog(trace_id, span_id, "db.tables", {
           category: "metadata",
@@ -282,7 +282,7 @@ export function registerRoutes(app: FastifyInstance): void {
         await reply.send({ columns });
       } catch (error) {
         if ((error as Error).message === "timeout") {
-          recordError("db.describe_table", "unknown", "timeout");
+          recordError("db.describe_table", config.driver, "timeout");
           auditLog(trace_id, span_id, "db.describe_table", {
             category: "metadata",
             duration_ms: Date.now() - start,
@@ -291,7 +291,7 @@ export function registerRoutes(app: FastifyInstance): void {
           await reply.status(504).send({ detail: "Query timed out" });
           return;
         }
-        recordError("db.describe_table", "unknown", "error");
+        recordError("db.describe_table", config.driver, "error");
         const message = error instanceof DatabaseError ? error.message : (error as Error).message;
         auditLog(trace_id, span_id, "db.describe_table", {
           category: "metadata",
@@ -525,7 +525,7 @@ export function registerRoutes(app: FastifyInstance): void {
         await reply.send(result);
       } catch (error) {
         if ((error as Error).message === "timeout") {
-          recordError("db.explain", "unknown", "timeout");
+          recordError("db.explain", config.driver, "timeout");
           auditLog(trace_id, span_id, "db.explain", {
             category: "metadata",
             duration_ms: Date.now() - start,
@@ -534,7 +534,7 @@ export function registerRoutes(app: FastifyInstance): void {
           await reply.status(504).send({ detail: "Query timed out" });
           return;
         }
-        recordError("db.explain", "unknown", "error");
+        recordError("db.explain", config.driver, "error");
         const message = error instanceof DatabaseError ? error.message : (error as Error).message;
         auditLog(trace_id, span_id, "db.explain", {
           category: "metadata",
