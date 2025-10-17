@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "prepare": "npm run build",
     "test": "npx tsx tests/run-all-tests.ts",
+    "test:docker": "docker compose run --rm test-runner",
     "test:sqlite": "npx tsx tests/test-sqlite.ts",
     "test:postgres": "POSTGRES_URL=postgresql://mcp:password@localhost:5432/mcp npx tsx tests/test-postgres.ts",
     "test:mysql": "MYSQL_URL=mysql://mcp:password@localhost:3306/mcp npx tsx tests/test-mysql.ts",

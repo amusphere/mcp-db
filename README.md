@@ -159,17 +159,13 @@ npm run test:mariadb     # Requires MariaDB container
 **Docker-based testing:**
 
 ```bash
-# Start all databases
-docker-compose up -d postgres mysql mariadb
+# Run all tests in Docker (recommended - auto cleanup)
+npm run test:docker
 
-# Run all tests
-npm test
-
-# Or run tests in Docker container
-docker-compose up --build test-runner
-
-# Stop and clean up
-docker-compose down -v
+# Or manually manage containers
+docker compose up -d postgres mysql mariadb  # Start databases
+npm test                                     # Run tests
+docker compose down -v                       # Stop and clean up
 ```
 
 ### HTTP Server Mode (Legacy)

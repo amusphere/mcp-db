@@ -87,12 +87,13 @@ services:
   test-runner:
     build:
       context: .
-      dockerfile: Dockerfile.test
+      dockerfile: Dockerfile
     container_name: mcp-test-runner
     environment:
       POSTGRES_URL: postgresql://mcp:password@postgres:5432/mcp
       MYSQL_URL: mysql://mcp:password@mysql:3306/mcp
       MARIADB_URL: mariadb://mcp:password@mariadb:3306/mcp
+      NODE_ENV: development
     depends_on:
       postgres:
         condition: service_healthy

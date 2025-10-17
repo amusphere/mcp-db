@@ -41,6 +41,7 @@ npm run typecheck      # strict tsc pass without emitting files
 
 # Testing commands
 npm test               # run all database tests (requires Docker for PostgreSQL/MySQL/MariaDB)
+npm run test:docker    # run all tests in Docker (recommended - auto cleanup)
 npm run test:sqlite    # run SQLite tests only (no Docker required)
 npm run test:postgres  # run PostgreSQL tests (requires running PostgreSQL container)
 npm run test:mysql     # run MySQL tests (requires running MySQL container)
@@ -49,12 +50,13 @@ npm run test:mariadb   # run MariaDB tests (requires running MariaDB container)
 
 ### Testing
 ```bash
-# Run all tests with Docker
-docker-compose up -d postgres mysql mariadb  # Start databases
-npm test                                     # Run all test suites
+# Recommended: Run all tests in Docker with auto cleanup
+npm run test:docker
 
-# Or use Docker test runner
-docker-compose up --build test-runner        # Build and run all tests in container
+# Or manually manage Docker containers
+docker compose up -d postgres mysql mariadb  # Start databases
+npm test                                     # Run all test suites
+docker compose down -v                       # Stop and clean up
 
 # Run individual test suites
 npm run test:sqlite      # SQLite (in-memory, no Docker needed)

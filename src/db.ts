@@ -177,7 +177,7 @@ export async function listTables(config: NormalizedDatabaseConfig, schema?: stri
 
       query += " ORDER BY table_schema, table_name";
       const [rows] = await connection.query<mysql.RowDataPacket[]>(query, params);
-      return rows.map((row) => `${row.table_schema as string}.${row.table_name as string}`);
+      return rows.map((row) => `${row.TABLE_SCHEMA as string}.${row.TABLE_NAME as string}`);
     } catch (error) {
       throw new DatabaseError((error as Error).message);
     } finally {
@@ -266,9 +266,9 @@ export async function describeTable(
         "WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position";
       const [rows] = await connection.query<mysql.RowDataPacket[]>(query, [schemaName, resolvedTable]);
       return rows.map((row) => ({
-        column_name: row.column_name as string,
-        data_type: row.data_type as string,
-        is_nullable: row.is_nullable === "YES",
+        column_name: row.COLUMN_NAME as string,
+        data_type: row.DATA_TYPE as string,
+        is_nullable: row.IS_NULLABLE === "YES",
       }));
     } catch (error) {
       throw new DatabaseError((error as Error).message);

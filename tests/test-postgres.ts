@@ -265,6 +265,8 @@ async function main() {
   if (failed > 0) {
     process.exit(1);
   }
+  // Explicitly exit on success too
+  process.exit(0);
 }
 
 main().catch((error) => {

@@ -100,25 +100,25 @@ async function testMariaDB() {
       logTest("Insert multiple rows", false, (error as Error).message);
     }
 
-    // Test 6: List tables
+    // Test 6: List tables (MariaDB returns schema.table format like MySQL)
     try {
       const tables = await listTables(config);
-      if (tables.some((t) => t.includes("test_users"))) {
+      if (tables.some((t) => t === "mcp.test_users")) {
         logTest("List tables", true);
       } else {
-        logTest("List tables", false, "Table 'test_users' not found");
+        logTest("List tables", false, `Table 'mcp.test_users' not found. Got: ${tables.join(", ")}`);
       }
     } catch (error) {
       logTest("List tables", false, (error as Error).message);
     }
 
-    // Test 7: Describe table
+    // Test 7: Describe table (MariaDB needs schema specified)
     try {
-      const columns = await describeTable(config, "test_users");
+      const columns = await describeTable(config, "test_users", "mcp");
       if (columns.length === 3 && columns.some((c) => c.column_name === "name")) {
         logTest("Describe table", true);
       } else {
-        logTest("Describe table", false, "Unexpected column structure");
+        logTest("Describe table", false, `Unexpected column structure. Got ${columns.length} columns`);
       }
     } catch (error) {
       logTest("Describe table", false, (error as Error).message);
@@ -215,6 +215,8 @@ async function main() {
   if (failed > 0) {
     process.exit(1);
   }
+  // Explicitly exit on success too
+  process.exit(0);
 }
 
 main().catch((error) => {

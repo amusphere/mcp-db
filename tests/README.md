@@ -84,10 +84,46 @@ Wait for all databases to be ready (check with `docker-compose ps`), then run al
 npx tsx tests/run-all-tests.ts
 ```
 
-Or use the npm script:
+```
+
+Or use the npm script (requires databases running):
 
 ```bash
 npm run test
+```
+
+## Running Tests in Docker
+
+The easiest way to run all tests is using the Docker test script:
+
+```bash
+# Recommended: Run all tests with auto cleanup
+npm run test:docker
+
+# This is equivalent to:
+docker compose run --rm test-runner
+```
+
+The `--rm` flag automatically removes the container after tests complete.
+
+To manually manage containers:
+
+```bash
+# Start databases
+docker compose up -d postgres mysql mariadb
+
+# Run tests
+npm test
+
+# Stop and clean up
+docker compose down -v
+```
+
+To run a specific test suite in Docker:
+
+```bash
+# PostgreSQL only
+docker compose run --rm test-runner npx tsx tests/test-postgres.ts
 ```
 
 ## Running Tests in Docker
@@ -190,7 +226,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Run tests
-        run: docker-compose up --build --exit-code-from test-runner test-runner
+        run: docker compose run --rm test-runner
 ```
 
 ## Troubleshooting
