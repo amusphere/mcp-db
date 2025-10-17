@@ -145,3 +145,8 @@ vite.config.ts.timestamp-*
 
 # Serena files
 .serena/
+
+# Test files
+test.db
+test-mcp.js
+*.tgz

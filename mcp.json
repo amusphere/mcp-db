@@ -1,17 +1,16 @@
 {
-  "name": "mcp-db",
+  "name": "@amusphere/mcp-db",
   "version": "0.1.0",
-  "description": "Reusable MCP server exposing database introspection tools via HTTP",
+  "description": "Model Context Protocol server for database introspection and controlled queries",
   "type": "server",
   "server": {
     "transport": {
-      "type": "http",
-      "url": "http://localhost:8080"
+      "type": "stdio"
     }
   },
   "tools": [
     {
-      "name": "db.tables",
+      "name": "db_tables",
       "description": "List tables available in the configured database",
       "input_schema": {
         "type": "object",
@@ -33,7 +32,7 @@
       }
     },
     {
-      "name": "db.describe_table",
+      "name": "db_describe_table",
       "description": "Describe columns for a specific table",
       "input_schema": {
         "type": "object",
@@ -65,7 +64,7 @@
       }
     },
     {
-      "name": "db.execute",
+      "name": "db_execute",
       "description": "Execute controlled SQL against the configured database",
       "input_schema": {
         "type": "object",

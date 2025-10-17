@@ -1,0 +1,41 @@
+# Source files (only include built dist/)
+src/
+*.ts
+!*.d.ts
+
+# Development files
+.env
+.env.*
+dev.db
+*.log
+
+# Tests
+test/
+*.test.ts
+*.spec.ts
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+tsconfig.json
+tsconfig.*.json
+.eslintrc.cjs
+.prettierrc
+
+# Documentation (already in files list)
+# README.md is included via package.json files field

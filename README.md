@@ -1,155 +1,425 @@
-# MCP DB Server (Node.js)
+# MCP Database Server
 
-## 各 LLM コーディングエージェントへの導入ガイド
+[![npm version](https://img.shields.io/npm/v/@amusphere/mcp-db.svg)](https://www.npmjs.com/package/@amusphere/mcp-db)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-### 1) 共通：サーバの起動
+A Model Context Protocol (MCP) server that provides secure database access for AI assistants and LLM-based tools. Query SQLite and PostgreSQL databases with built-in safety controls, query validation, and audit logging.
 
-#### npm（ローカル）
-```shell
-npm install
-npm run build
-npm start
+## Features
+
+- 🔒 **Secure by Default**: Read-only mode with granular permission controls
+- 🗄️ **Multi-Database**: Support for SQLite and PostgreSQL
+- 🛡️ **SQL Validation**: Automatic query validation and injection prevention
+- 📊 **Table Allowlisting**: Restrict access to specific tables
+- ⏱️ **Query Timeouts**: Prevent long-running queries
+- 📝 **Audit Logging**: JSON-formatted operation logs
+- 🔌 **MCP Protocol**: Native stdio transport for AI assistants
+- 🌐 **HTTP Mode**: Optional REST API for legacy integrations
+
+## Supported MCP Clients
+
+- [Codex CLI](https://github.com/modelcontextprotocol/cli)
+- [Claude Desktop](https://claude.ai/download)
+- [Cline (VS Code Extension)](https://github.com/cline/cline)
+- Any MCP-compatible client
+
+## Quick Start
+
+### Installation
+
+The easiest way to use this MCP server is via `npx` (no installation required):
+
+```bash
+npx @amusphere/mcp-db --host sqlite:///./dev.db
 ```
 
-開発時はホットリロード付きで `npm run dev` を利用できます。
-Codex CLI の設定例:
+### Configuration for MCP Clients
+
+#### Codex CLI
+
+Add to your Codex configuration file (`~/.codex/mcp.toml` or similar):
 
 ```toml
-[mcp_servers."mcp-db"]
-command = "npm"
-args = ["run", "start"]
-```
-
-#### npx（ワンショット実行）
-ローカルに Node.js さえあれば、ビルド無しで以下のように起動できます。
-
-```shell
-npx -y @amusphere/mcp-db --db-url "sqlite:///./dev.db" --port 8080
-```
-
-`--db-url` は `--host` のエイリアスで、`MAX_ROWS` や `ALLOW_WRITES` なども CLI 引数で上書きできます。Codex から直接起動する場合の設定例:
-
-```toml
-[mcp_servers.Context7]
+[mcp_servers.mcp-db]
 command = "npx"
 args = ["-y", "@amusphere/mcp-db", "--host", "sqlite:///./dev.db"]
 ```
 
-#### Docker
-```shell
+#### Claude Desktop
+
+Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+
+```json
+{
+  "mcpServers": {
+    "mcp-db": {
+      "command": "npx",
+      "args": ["-y", "@amusphere/mcp-db", "--host", "sqlite:///./dev.db"]
+    }
+  }
+}
+```
+
+#### PostgreSQL Example
+
+```toml
+[mcp_servers.mcp-db]
+command = "npx"
+args = [
+  "-y",
+  "@amusphere/mcp-db",
+  "--host", "postgresql://user:password@localhost:5432/mydb"
+]
+```
+
+## Usage Examples
+
+### Command Line
+
+#### SQLite Database
+
+```bash
+# Basic usage with SQLite
+npx @amusphere/mcp-db --host sqlite:///./dev.db
+
+# With write operations enabled
+npx @amusphere/mcp-db --host sqlite:///./dev.db --allow-writes
+
+# With table allowlist (only allow specific tables)
+npx @amusphere/mcp-db --host sqlite:///./dev.db --allowlist users,posts,comments
+
+# With custom limits
+npx @amusphere/mcp-db --host sqlite:///./dev.db --max-rows 100 --timeout 30
+```
+
+#### PostgreSQL Database
+
+```bash
+# Basic usage
+npx @amusphere/mcp-db --host postgresql://user:password@localhost:5432/mydb
+
+# With schema-qualified allowlist
+npx @amusphere/mcp-db \
+  --host postgresql://user:password@localhost:5432/mydb \
+  --allowlist public.users,public.posts
+```
+
+### Local Development
+
+Clone and build from source:
+
+```bash
+git clone https://github.com/amusphere/mcp-db.git
+cd mcp-db
+npm install
+npm run build
+npm start -- --host sqlite:///./dev.db
+```
+
+Development mode with hot-reload:
+
+```bash
+npm run dev
+```
+
+### HTTP Server Mode (Legacy)
+
+For backwards compatibility with HTTP-based integrations:
+
+```bash
+npx @amusphere/mcp-db --host sqlite:///./dev.db --http-mode --port 8080
+```
+
+This exposes REST endpoints at `http://localhost:8080/tools/*` for non-MCP clients.
+
+## Configuration Reference
+
+### Command Line Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--host <url>` | Database connection URL (alias: `--db-url`) | `sqlite:///./dev.db` |
+| `--allow-writes` | Enable INSERT/UPDATE/DELETE operations | `false` |
+| `--allow-ddl` | Enable CREATE/ALTER/DROP operations | `false` |
+| `--allowlist <tables>` | Comma-separated list of allowed tables | All tables |
+| `--max-rows <number>` | Maximum rows to return for SELECT queries | `500` |
+| `--timeout <seconds>` | Query timeout in seconds | `20` |
+| `--http-mode` | Run as HTTP server instead of MCP stdio | `false` |
+| `--port <number>` | Port for HTTP mode | `8080` |
+| `--require-api-key` | Require X-API-Key header (HTTP mode only) | `false` |
+| `--api-key <value>` | Expected API key value | - |
+
+### Database URL Formats
+
+**SQLite:**
+```
+sqlite:///./path/to/database.db    # Relative path
+sqlite:////absolute/path/to/db.db  # Absolute path
+sqlite:///:memory:                 # In-memory database
+```
+
+**PostgreSQL:**
+```
+postgresql://username:password@host:port/database
+postgresql://localhost/mydb        # Local with defaults
+```
+
+**PostgreSQL:**
+```
+postgresql://username:password@host:port/database
+postgresql://localhost/mydb        # Local with defaults
+```
+
+### Environment Variables
+
+All command-line arguments can also be set via environment variables (command-line args take precedence):
+
+| Environment Variable | Equivalent Argument |
+|---------------------|---------------------|
+| `DB_URL` | `--host` |
+| `ALLOW_WRITES` | `--allow-writes` |
+| `ALLOW_DDL` | `--allow-ddl` |
+| `ALLOWLIST_TABLES` | `--allowlist` |
+| `MAX_ROWS` | `--max-rows` |
+| `QUERY_TIMEOUT_SEC` | `--timeout` |
+| `PORT` | `--port` |
+| `REQUIRE_API_KEY` | `--require-api-key` |
+| `API_KEY` | `--api-key` |
+
+**Example with environment variables:**
+
+```bash
+export DB_URL="postgresql://user:pass@localhost:5432/mydb"
+export ALLOW_WRITES="true"
+export ALLOWLIST_TABLES="users,posts,comments"
+npx @amusphere/mcp-db
+```
+
+## Available MCP Tools
+
+This server provides three MCP tools for database operations:
+
+### `db_tables`
+List all tables in the database.
+
+**Parameters:**
+- `db_url` (optional): Override default database URL
+- `schema` (optional): Filter by schema (PostgreSQL only)
+
+**Example:**
+```json
+{
+  "db_url": "sqlite:///./dev.db",
+  "schema": "public"
+}
+```
+
+### `db_describe_table`
+Get column information for a specific table.
+
+**Parameters:**
+- `table` (required): Table name to describe
+- `db_url` (optional): Override default database URL
+- `schema` (optional): Schema name (PostgreSQL only)
+
+**Example:**
+```json
+{
+  "table": "users",
+  "schema": "public"
+}
+```
+
+### `db_execute`
+Execute a SQL statement with safety controls.
+
+**Parameters:**
+- `sql` (required): SQL statement to execute
+- `args` (optional): Named parameters (use `:param` syntax in SQL)
+- `allow_write` (optional): Must be `true` for write operations
+- `row_limit` (optional): Override default max rows
+- `db_url` (optional): Override default database URL
+
+**Example:**
+```json
+{
+  "sql": "SELECT * FROM users WHERE status = :status LIMIT 10",
+  "args": {
+    "status": "active"
+  }
+}
+```
+
+## How AI Assistants Use These Tools
+
+When you connect an AI assistant (like Claude or Codex) to this MCP server, it can:
+
+1. **Explore your database structure**: "What tables are in my database?"
+2. **Understand table schemas**: "Show me the columns in the users table"
+3. **Query data**: "How many active users do we have?"
+4. **Analyze data**: "What are the top 10 products by sales?"
+5. **Generate insights**: "Find any duplicate email addresses in the users table"
+
+The AI assistant will automatically use the appropriate tool and construct safe SQL queries based on your natural language requests.
+
+## Configuration Reference
+
+1. **Default is READ-ONLY**: Write and DDL operations require explicit enabling
+2. **Use allowlists**: Restrict access to specific tables with `--allowlist`
+3. **Set query limits**: Use `--max-rows` and `--timeout` to prevent resource exhaustion
+4. **Named parameters**: Always use `:param` syntax to avoid SQL injection
+5. **Audit logging**: All operations are logged to stderr in JSON format
+
+## Security Best Practices
+
+1. **Default is READ-ONLY**: Write and DDL operations require explicit enabling
+2. **Use allowlists**: Restrict access to specific tables with `--allowlist`
+3. **Set query limits**: Use `--max-rows` and `--timeout` to prevent resource exhaustion
+4. **Named parameters**: Always use `:param` syntax to avoid SQL injection
+5. **Audit logging**: All operations are logged to stderr in JSON format
+6. **Separate credentials**: Use read-only database users when possible
+7. **Network security**: For remote databases, use SSL/TLS connections
+
+### Audit Logs
+
+All database operations are logged to stderr in JSON format:
+
+```json
+{
+  "timestamp": "2024-01-17T10:30:45.123Z",
+  "tool": "db_execute",
+  "category": "read",
+  "duration_ms": 42,
+  "rowcount": 10,
+  "sql": "SELECT * FROM users LIMIT 10"
+}
+```
+
+## Troubleshooting
+
+### Connection Issues
+
+**SQLite file not found:**
+```bash
+# Use absolute path
+npx @amusphere/mcp-db --host sqlite:////absolute/path/to/db.db
+
+# Or relative from current directory
+npx @amusphere/mcp-db --host sqlite:///./relative/path/db.db
+```
+
+**PostgreSQL connection refused:**
+- Verify the database is running: `pg_isready -h localhost`
+- Check connection string format
+- Ensure network access (firewall, security groups)
+
+### Permission Errors
+
+**"Write operations disabled":**
+```bash
+# Enable writes (both server AND request must allow)
+npx @amusphere/mcp-db --host sqlite:///./dev.db --allow-writes
+```
+
+**"Table not allowlisted":**
+```bash
+# Add tables to allowlist
+npx @amusphere/mcp-db --host sqlite:///./dev.db --allowlist users,posts
+```
+
+### Performance Issues
+
+**Queries timing out:**
+```bash
+# Increase timeout
+npx @amusphere/mcp-db --host sqlite:///./dev.db --timeout 60
+```
+
+**Too much data returned:**
+```bash
+# Reduce row limit
+npx @amusphere/mcp-db --host sqlite:///./dev.db --max-rows 100
+```
+
+### MCP Client Configuration
+
+**Server not appearing in Claude Desktop:**
+1. Check config file location: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
+2. Verify JSON syntax is valid
+3. Restart Claude Desktop completely
+
+**Codex not connecting:**
+1. Check `~/.codex/mcp.toml` syntax
+2. Ensure `npx` is in PATH
+3. Try running command manually first
+
+## Docker Deployment
+
+### Using Docker Compose
+
+```bash
+# Start the server with PostgreSQL
+docker-compose up --build
+
+# Access at http://localhost:8080 (HTTP mode)
+```
+
+### Standalone Container
+
+```bash
+# Build
 docker build -t mcp-db:latest .
-docker run --rm -p 8080:8080 \
-  -e DB_URL='postgresql://user:pass@localhost:5432/appdb' \
-  -e ALLOW_WRITES=false -e ALLOW_DDL=false \
+
+# Run with SQLite (mount volume for persistence)
+docker run --rm \
+  -v $(pwd)/data:/data \
+  -e DB_URL='sqlite:////data/mydb.db' \
+  mcp-db:latest
+
+# Run with PostgreSQL
+docker run --rm \
+  -e DB_URL='postgresql://user:pass@host:5432/db' \
+  -e ALLOW_WRITES=false \
   mcp-db:latest
 ```
 
-### 2) Codex（CLI/エージェントが MCP HTTP ツールをサポートする前提）
-- `mcp.json` のツール定義を Codex のツール登録に読み込み、エンドポイント URL を `http://localhost:8080` に設定します。
-- 動作確認は以下の順番で行ってください。
-  1. `db.tables` でテーブル一覧を取得
-  2. `db.describe_table` で対象テーブルのカラムを確認
-  3. `db.execute` で `SELECT ... LIMIT` を実行
-- 書き込み系操作はサーバ環境変数 `ALLOW_WRITES=true` とリクエスト側 `allow_write=true` の二重許可がない限り拒否されます。
+## Contributing
 
-### 3) Cloud Code（VS Code / JetBrains）
-- ローカルで本 MCP サーバを並走させ、Cloud Code から HTTP ツールとして `POST /tools/db.*` を呼び出します。
-- `.env` や Cloud Code のデプロイ設定で `DB_URL` などの環境変数を指定してください。
-- 例: `curl -s -X POST http://localhost:8080/tools/db.tables -H 'Content-Type: application/json' -d '{}'`
-- Cloud Code 側では `http://localhost:8080/tools/db.execute` を HTTP ツールとして登録し、Body を JSON で送信します。
+Contributions are welcome! Please:
 
-### 4) そのほかのエージェント（Claude Desktop, Cursor など）
-- Claude Desktop (MCP): `mcp.json` を読み込み、エンドポイントを `http://localhost:8080` に設定。
-- Cursor: Custom Tools (HTTP) として 3 エンドポイントを登録し、JSON Body でパラメータを送信。
-- どのエージェントでも `db.tables` → `db.describe_table` → `db.execute` の順で利用する運用を推奨します。
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-### 5) 安全運用メモ
-- 既定は READ ONLY。大量取得を避け、必要な列・条件・`LIMIT` を付けてください。
-- 書き込みはサーバ設定とリクエストの二重ゲートが必要です。
-- DDL は `ALLOW_DDL=true` を明示しない限り拒否されます。
-- `ALLOWLIST_TABLES` を設定すると、許可されていないテーブルを参照する SQL は 403 で拒否されます。
-- `MAX_ROWS` と `QUERY_TIMEOUT_SEC` を環境に合わせて調整し、負荷やレスポンス遅延を抑えてください。
+### Development Setup
+
+```bash
+git clone https://github.com/amusphere/mcp-db.git
+cd mcp-db
+npm install
+npm run dev  # Start development server
+npm run lint # Run linter
+npm run typecheck # Type checking
+```
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details
+
+## Support
+
+- 📖 [Documentation](https://github.com/amusphere/mcp-db)
+- 🐛 [Issue Tracker](https://github.com/amusphere/mcp-db/issues)
+- 💬 [Discussions](https://github.com/amusphere/mcp-db/discussions)
+
+## Related Projects
+
+- [Model Context Protocol](https://modelcontextprotocol.io/) - Official MCP documentation
+- [MCP Servers](https://github.com/modelcontextprotocol/servers) - Collection of MCP servers
+- [Claude Desktop](https://claude.ai/download) - AI assistant with MCP support
 
 ---
 
-## プロジェクト概要
-- Node.js + Fastify で実装した独立 MCP サーバです。既定で読み取り専用、環境変数でポリシー制御が可能です。
-- MCP ツールとして `db.tables` / `db.describe_table` / `db.execute` を提供し、HTTP エンドポイント `/tools/db.*` で公開します。
-- 監査ログは JSON 形式でメソッド、分類、処理時間、行数／rowcount、エラーを標準出力に記録します。
-
-## ディレクトリ構成
-```
-mcp-db/
-├─ src/
-│  ├─ config.ts
-│  ├─ db.ts
-│  ├─ index.ts
-│  └─ routes.ts
-├─ mcp.json
-├─ openapi.yaml
-├─ package.json
-├─ package-lock.json
-├─ tsconfig.json
-├─ Dockerfile
-├─ docker-compose.yml
-├─ .env.example
-├─ .eslintrc.cjs
-├─ .gitignore
-└─ README.md
-```
-
-## 環境変数
-| 変数 | 既定値 | 説明 |
-| --- | --- | --- |
-| `DB_URL` | `sqlite:///./dev.db` | 接続先 DB。リクエスト `db_url` が指定されていればそちらを優先。 |
-| `MAX_ROWS` | `500` | 読み取り時の上限件数。`row_limit` が指定されてもこの値を超えません。 |
-| `QUERY_TIMEOUT_SEC` | `20` | DB クエリのタイムアウト秒数。超過時は 504 を返します。 |
-| `ALLOW_WRITES` | `false` | サーバ側で書き込みを許可するか。リクエスト `allow_write=true` と併用で初めて実行可能。 |
-| `ALLOW_DDL` | `false` | DDL 実行を許可するか。 |
-| `ALLOWLIST_TABLES` | 空文字 | `schema.table` のカンマ区切り。設定時は一致しないテーブルを 403 で拒否。 |
-| `REQUIRE_API_KEY` | `false` | `true` の場合、すべてのエンドポイントで `X-API-Key` ヘッダを検証。 |
-| `API_KEY` | 空文字 | API キーの期待値。 |
-
-`.env.example` をコピーし、必要に応じて値を更新してください。
-
-## MCP ツール API
-| ツール | 入力 | 出力 |
-| --- | --- | --- |
-| `db.tables` | `{ db_url?: string, schema?: string }` | `{ tables: string[] }`（allowlist があればフィルタ済み） |
-| `db.describe_table` | `{ db_url?: string, schema?: string, table: string }` | `{ columns: [{ column_name, data_type, is_nullable }] }` |
-| `db.execute` | `{ db_url?, sql, args?, allow_write?, row_limit? }` | 読み取り時 `{ rows, truncated }`／書込み時 `{ rowcount }` |
-
-分類ロジック：先頭キーワードで `read/write/ddl/unknown` を判定し、複数ステートメントや未許可テーブルを検出すると 400/403 を返します。
-
-## ローカル開発
-- 依存関係のインストール: `npm install`
-- TypeScript ビルド: `npm run build`
-- ホットリロード開発: `npm run dev`
-- Lint: `npm run lint`
-- 型チェック: `npm run typecheck`
-
-## Docker / Compose
-- `docker-compose up --build` で API と Postgres をローカル検証できます。
-- Compose で提供する Postgres への接続例: `postgresql://mcp:password@db:5432/mcp`
-
-## 監査ログ
-- JSON フォーマットで `tool`, `category`, `duration_ms`, `rows`/`rowcount`, `error` を出力します。
-- 組織のログ収集基盤に転送することで、異常クエリや失敗の追跡が容易になります。
-
-## 使い方スニペット
-```shell
-# テーブル列挙
-curl -s http://localhost:8080/tools/db.tables -X POST -H 'Content-Type: application/json' -d '{}'
-
-# カラム記述
-curl -s http://localhost:8080/tools/db.describe_table -X POST -H 'Content-Type: application/json' \
-  -d '{"table":"public.users"}'
-
-# 参照
-curl -s http://localhost:8080/tools/db.execute -X POST -H 'Content-Type: application/json' \
-  -d '{"sql":"SELECT id,email FROM public.users WHERE email=:email LIMIT 50","args":{"email":"alice@example.com"}}'
-
-# 書き込み（両方の許可が必要）
-curl -s http://localhost:8080/tools/db.execute -X POST -H 'Content-Type: application/json' \
-  -d '{"sql":"UPDATE public.users SET name=:n WHERE id=:id","args":{"n":"Alice","id":1},"allow_write":true}'
-```
+**Made with ❤️ for the MCP community**
