@@ -16,6 +16,8 @@
   - `test-mariadb.ts` - MariaDB integration tests
   - `run-all-tests.ts` - Test orchestrator
   - `README.md` - Detailed testing documentation
+- `.github/workflows/` contains CI/CD configurations:
+  - `ci.yml` - GitHub Actions workflow for lint, typecheck, build, and test
 - `dist/` contains emitted JavaScript; edit only the TypeScript originals.
 - Operational assets: `mcp.json` exposes MCP tool metadata, `openapi.yaml` documents HTTP API, `Dockerfile` / `docker-compose.yml` support container runs.
 - Generated artifacts (logs, transient DB files) should stay outside the repo or be ignored via `.gitignore`.
@@ -91,6 +93,10 @@ See [tests/README.md](tests/README.md) for comprehensive testing documentation.
 - Test both MCP stdio mode (default) and HTTP mode (`--http-mode`)
 - All tests automatically clean up their data (drop test tables)
 - See [tests/README.md](tests/README.md) for detailed testing procedures and troubleshooting
+- **CI/CD**: GitHub Actions automatically runs lint, typecheck, build, and all tests on push/PR
+  - Workflow file: `.github/workflows/ci.yml`
+  - Tests run against PostgreSQL 16, MySQL 8.0, MariaDB 11.2 in service containers
+  - All checks must pass before merging
 
 ## MCP Tools (stdio mode)
 The server exposes four MCP tools:

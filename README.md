@@ -1,6 +1,7 @@
 # MCP Database Server
 
 [![npm version](https://img.shields.io/npm/v/@amusphere/mcp-db.svg)](https://www.npmjs.com/package/@amusphere/mcp-db)
+[![CI](https://github.com/amusphere/mcp-db/actions/workflows/ci.yml/badge.svg)](https://github.com/amusphere/mcp-db/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Model Context Protocol (MCP) server that provides secure database access for AI assistants and LLM-based tools. Query SQLite, PostgreSQL, MySQL, and MariaDB databases with built-in safety controls, query validation, and audit logging.
