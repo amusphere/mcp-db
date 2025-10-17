@@ -2,7 +2,7 @@
  * Prometheus metrics support for monitoring and observability
  */
 
-import { Registry, Counter, Histogram, Gauge } from "prom-client";
+import { Registry, Counter, Histogram, Gauge, collectDefaultMetrics } from "prom-client";
 
 export interface MetricsConfig {
   enabled: boolean;
@@ -55,6 +55,12 @@ export function initializeMetrics(config: MetricsConfig): void {
   // Register default metrics (process CPU, memory, etc.)
   metricsRegistry.setDefaultLabels({
     app: "mcp-db",
+  });
+
+  // Collect default Node.js process metrics
+  collectDefaultMetrics({
+    register: metricsRegistry,
+    prefix: "mcp_db_",
   });
 }
 

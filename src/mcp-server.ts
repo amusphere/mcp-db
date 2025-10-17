@@ -197,6 +197,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
   const trace_id = generateTraceId();
   const span_id = generateSpanId();
   const startTime = Date.now();
+  let dbDriver = "unknown"; // Track driver for error metrics
 
   logger.info("Tool call started", { trace_id, span_id, tool: name });
 
@@ -204,6 +205,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
     switch (name) {
       case "db_tables": {
         const config = resolveDatabaseConfig(args?.db_url as string | undefined);
+        dbDriver = config.driver;
         const tables = await withTimeout(
           listTables(config, args?.schema as string | undefined),
           settings.queryTimeoutMs
@@ -246,6 +248,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
           throw new Error("table parameter is required");
         }
         const config = resolveDatabaseConfig(args?.db_url as string | undefined);
+        dbDriver = config.driver;
         ensureTableAllowed(table, args?.schema as string | undefined);
         const columns = await withTimeout(
           describeTable(config, table, args?.schema as string | undefined),
@@ -279,6 +282,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         }
 
         const config = resolveDatabaseConfig(args?.db_url as string | undefined);
+        dbDriver = config.driver;
         const validated = enforceSingleStatement(sql);
         const category = classifyStatement(validated);
 
@@ -365,6 +369,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         }
 
         const config = resolveDatabaseConfig(args?.db_url as string | undefined);
+        dbDriver = config.driver;
         const validated = enforceSingleStatement(sql);
 
         // Validate allowlist (similar to db_execute)
@@ -408,7 +413,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
   } catch (error) {
     const duration_ms = Date.now() - startTime;
     if (error instanceof Error && error.message === "timeout") {
-      recordError(name, "unknown", "timeout");
+      recordError(name, dbDriver, "timeout");
       logger.error("Tool call timed out", {
         trace_id,
         span_id,
@@ -428,7 +433,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
     }
     if (error instanceof SQLValidationError || error instanceof DatabaseError) {
       const errorType = error instanceof SQLValidationError ? "validation" : "database";
-      recordError(name, "unknown", errorType);
+      recordError(name, dbDriver, errorType);
       logger.error("Tool call failed", {
         trace_id,
         span_id,
@@ -446,7 +451,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
         isError: true,
       };
     }
-    recordError(name, "unknown", "unexpected");
+    recordError(name, dbDriver, "unexpected");
     logger.error("Tool call failed with unexpected error", {
       trace_id,
       span_id,
