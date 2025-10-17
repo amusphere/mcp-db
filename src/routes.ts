@@ -170,7 +170,6 @@ export function registerRoutes(app: FastifyInstance): void {
           db: config.driver,
           duration_ms,
           rowcount: filtered.length,
-          tables: filtered.length,
         });
         await reply.send({ tables: filtered });
       } catch (error) {
