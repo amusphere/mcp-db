@@ -1,0 +1,109 @@
+{
+  "name": "mcp-db",
+  "version": "0.1.0",
+  "description": "Reusable MCP server exposing database introspection tools via HTTP",
+  "type": "server",
+  "server": {
+    "transport": {
+      "type": "http",
+      "url": "http://localhost:8080"
+    }
+  },
+  "tools": [
+    {
+      "name": "db.tables",
+      "description": "List tables available in the configured database",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "db_url": {"type": "string"},
+          "schema": {"type": "string"}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["tables"],
+        "properties": {
+          "tables": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    {
+      "name": "db.describe_table",
+      "description": "Describe columns for a specific table",
+      "input_schema": {
+        "type": "object",
+        "required": ["table"],
+        "properties": {
+          "db_url": {"type": "string"},
+          "schema": {"type": "string"},
+          "table": {"type": "string"}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["columns"],
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["column_name", "data_type", "is_nullable"],
+              "properties": {
+                "column_name": {"type": "string"},
+                "data_type": {"type": "string"},
+                "is_nullable": {"type": "boolean"}
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "db.execute",
+      "description": "Execute controlled SQL against the configured database",
+      "input_schema": {
+        "type": "object",
+        "required": ["sql"],
+        "properties": {
+          "db_url": {"type": "string"},
+          "sql": {"type": "string"},
+          "args": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "allow_write": {"type": "boolean"},
+          "row_limit": {"type": "integer", "minimum": 1}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["rows", "truncated"],
+            "properties": {
+              "rows": {
+                "type": "array",
+                "items": {"type": "object"}
+              },
+              "truncated": {"type": "boolean"}
+            }
+          },
+          {
+            "type": "object",
+            "required": ["rowcount"],
+            "properties": {
+              "rowcount": {"type": "integer"}
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

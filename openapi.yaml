@@ -1,0 +1,213 @@
+openapi: 3.1.0
+info:
+  title: MCP DB Server
+  version: 0.1.0
+  description: HTTP API exposing MCP database tooling endpoints.
+servers:
+  - url: http://localhost:8080
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+  /tools/db.tables:
+    post:
+      summary: List available tables
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                db_url:
+                  type: string
+                  description: Optional database URL override.
+                schema:
+                  type: string
+                  description: Optional schema filter.
+              additionalProperties: false
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - tables
+                properties:
+                  tables:
+                    type: array
+                    items:
+                      type: string
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "504":
+          $ref: '#/components/responses/Timeout'
+  /tools/db.describe_table:
+    post:
+      summary: Describe a table's columns
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - table
+              properties:
+                db_url:
+                  type: string
+                  description: Optional database URL override.
+                schema:
+                  type: string
+                  description: Optional schema name if table is not qualified.
+                table:
+                  type: string
+                  description: Target table (optionally schema qualified).
+              additionalProperties: false
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - columns
+                properties:
+                  columns:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - column_name
+                        - data_type
+                        - is_nullable
+                      properties:
+                        column_name:
+                          type: string
+                        data_type:
+                          type: string
+                        is_nullable:
+                          type: boolean
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          description: Table not found
+        "504":
+          $ref: '#/components/responses/Timeout'
+  /tools/db.execute:
+    post:
+      summary: Execute SQL with policy enforcement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sql
+              properties:
+                db_url:
+                  type: string
+                sql:
+                  type: string
+                args:
+                  type: object
+                  additionalProperties: true
+                allow_write:
+                  type: boolean
+                row_limit:
+                  type: integer
+                  minimum: 1
+              additionalProperties: false
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required:
+                      - rows
+                      - truncated
+                    properties:
+                      rows:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: true
+                      truncated:
+                        type: boolean
+                  - type: object
+                    required:
+                      - rowcount
+                    properties:
+                      rowcount:
+                        type: integer
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "504":
+          $ref: '#/components/responses/Timeout'
+components:
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail:
+                type: string
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail:
+                type: string
+    Forbidden:
+      description: Operation not permitted by policy
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail:
+                type: string
+    Timeout:
+      description: Query timed out
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail:
+                type: string

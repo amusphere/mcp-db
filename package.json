@@ -1,0 +1,37 @@
+{
+  "name": "mcp-db",
+  "version": "0.1.0",
+  "description": "Reusable MCP server for database inspection with controlled writes (Node.js edition)",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "mcp-db": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "lint": "eslint . --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "prepare": "npm run build"
+  },
+  "author": "Shuto",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "fastify": "^4.27.2",
+    "pg": "^8.11.5",
+    "sqlite": "^4.2.1",
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/pg": "^8.15.5",
+    "@typescript-eslint/eslint-plugin": "^7.1.1",
+    "@typescript-eslint/parser": "^7.1.1",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.2"
+  }
+}
