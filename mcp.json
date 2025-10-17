@@ -103,6 +103,35 @@
           }
         ]
       }
+    },
+    {
+      "name": "db_explain",
+      "description": "Get query execution plan and performance information",
+      "input_schema": {
+        "type": "object",
+        "required": ["sql"],
+        "properties": {
+          "db_url": {"type": "string"},
+          "sql": {"type": "string"},
+          "args": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "analyze": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["plan", "query"],
+        "properties": {
+          "plan": {
+            "type": "array",
+            "items": {"type": "object"}
+          },
+          "query": {"type": "string"}
+        }
+      }
     }
   ]
 }

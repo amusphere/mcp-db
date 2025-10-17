@@ -13,6 +13,7 @@ import {
   DatabaseError,
   describeTable,
   executeSql,
+  explainQuery,
   listTables,
   normalizeDatabaseUrl,
   type NormalizedDatabaseConfig,
@@ -155,6 +156,32 @@ const tools: Tool[] = [
       required: ["sql"],
     },
   },
+  {
+    name: "db_explain",
+    description: "Get query execution plan and performance information using EXPLAIN. Helps analyze query performance and optimization opportunities.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        db_url: {
+          type: "string",
+          description: "Optional database URL override",
+        },
+        sql: {
+          type: "string",
+          description: "SQL query to explain (typically a SELECT statement)",
+        },
+        args: {
+          type: "object",
+          description: "Named parameters for the SQL statement (e.g., {name: 'John'})",
+        },
+        analyze: {
+          type: "boolean",
+          description: "Run EXPLAIN ANALYZE to get actual execution statistics (executes the query)",
+        },
+      },
+      required: ["sql"],
+    },
+  },
 ];
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -274,6 +301,39 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
             args?.args as Record<string, unknown> | undefined,
             expectResult,
             rowLimit
+          ),
+          settings.queryTimeoutMs
+        );
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "db_explain": {
+        const sql = args?.sql as string;
+        if (!sql) {
+          throw new Error("sql parameter is required");
+        }
+
+        const config = resolveDatabaseConfig(args?.db_url as string | undefined);
+        const validated = enforceSingleStatement(sql);
+
+        // Validate allowlist (similar to db_execute)
+        validateAllowlist(validated, settings.allowlistTables);
+
+        const analyze = args?.analyze === true;
+        const result = await withTimeout(
+          explainQuery(
+            config,
+            validated,
+            args?.args as Record<string, unknown> | undefined,
+            analyze
           ),
           settings.queryTimeoutMs
         );

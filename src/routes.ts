@@ -4,6 +4,7 @@ import {
   DatabaseError,
   describeTable,
   executeSql,
+  explainQuery,
   listTables,
   normalizeDatabaseUrl,
   type NormalizedDatabaseConfig,
@@ -36,6 +37,13 @@ interface ExecuteRequestBody {
   args?: Record<string, unknown>;
   allow_write?: boolean;
   row_limit?: number;
+}
+
+interface ExplainRequestBody {
+  db_url?: string;
+  sql: string;
+  args?: Record<string, unknown>;
+  analyze?: boolean;
 }
 
 function auditLog(payload: Record<string, unknown>): void {
@@ -430,6 +438,93 @@ export function registerRoutes(app: FastifyInstance): void {
         auditLog({
           tool: "db.execute",
           category: category.valueOf(),
+          duration_ms: Date.now() - start,
+          error: message,
+        });
+        await reply.status(400).send({ detail: message });
+      }
+    }
+  );
+
+  app.post<{ Body: ExplainRequestBody }>(
+    "/tools/db.explain",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["sql"],
+          properties: {
+            db_url: { type: "string" },
+            sql: { type: "string" },
+            args: { type: "object", additionalProperties: true },
+            analyze: { type: "boolean" },
+          },
+          additionalProperties: false,
+        },
+      },
+    },
+    async (request, reply) => {
+      const start = Date.now();
+      const body = request.body;
+      if (settings.requireApiKey) {
+        const header = request.headers["x-api-key"];
+        if (header !== settings.apiKey) {
+          auditLog({
+            tool: "db.explain",
+            category: "metadata",
+            duration_ms: Date.now() - start,
+            error: "unauthorized",
+          });
+          await reply.status(401).send({ detail: "Invalid API key" });
+          return;
+        }
+      }
+      let config: NormalizedDatabaseConfig;
+      let normalizedSql: string;
+      try {
+        config = resolveDatabaseConfig(body.db_url);
+        normalizedSql = enforceSingleStatement(body.sql);
+        validateAllowlist(normalizedSql, settings.allowlistTables);
+      } catch (error) {
+        const message = (error as Error).message;
+        const status = error instanceof SQLValidationError ? 403 : 400;
+        auditLog({
+          tool: "db.explain",
+          category: "metadata",
+          duration_ms: Date.now() - start,
+          error: message,
+        });
+        await reply.status(status).send({ detail: message });
+        return;
+      }
+
+      try {
+        const result = await withTimeout(
+          explainQuery(config, normalizedSql, body.args, body.analyze ?? false),
+          settings.queryTimeoutMs
+        );
+        auditLog({
+          tool: "db.explain",
+          category: "metadata",
+          duration_ms: Date.now() - start,
+          analyze: body.analyze ?? false,
+        });
+        await reply.send(result);
+      } catch (error) {
+        if ((error as Error).message === "timeout") {
+          auditLog({
+            tool: "db.explain",
+            category: "metadata",
+            duration_ms: Date.now() - start,
+            error: "timeout",
+          });
+          await reply.status(504).send({ detail: "Query timed out" });
+          return;
+        }
+        const message = error instanceof DatabaseError ? error.message : (error as Error).message;
+        auditLog({
+          tool: "db.explain",
+          category: "metadata",
           duration_ms: Date.now() - start,
           error: message,
         });

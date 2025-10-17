@@ -173,6 +173,58 @@ paths:
           $ref: '#/components/responses/Forbidden'
         "504":
           $ref: '#/components/responses/Timeout'
+  /tools/db.explain:
+    post:
+      summary: Get query execution plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sql
+              properties:
+                db_url:
+                  type: string
+                  description: Optional database URL override.
+                sql:
+                  type: string
+                  description: SQL query to explain.
+                args:
+                  type: object
+                  additionalProperties: true
+                  description: Named parameters for the SQL statement.
+                analyze:
+                  type: boolean
+                  description: Run EXPLAIN ANALYZE to get actual execution statistics.
+              additionalProperties: false
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - plan
+                  - query
+                properties:
+                  plan:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  query:
+                    type: string
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "504":
+          $ref: '#/components/responses/Timeout'
 components:
   responses:
     BadRequest:

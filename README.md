@@ -216,7 +216,7 @@ npx @amusphere/mcp-db
 
 ## Available MCP Tools
 
-This server provides three MCP tools for database operations:
+This server provides four MCP tools for database operations:
 
 ### `db_tables`
 List all tables in the database.
@@ -297,6 +297,41 @@ Execute a SQL statement with safety controls.
 }
 ```
 
+### `db_explain`
+Get query execution plan and performance information using EXPLAIN.
+
+**Parameters:**
+- `sql` (required): SQL query to analyze (typically a SELECT statement)
+- `db_url` (required/optional): Database URL. Required if no default `--host` is set, otherwise optional to override
+- `args` (optional): Named parameters (use `:param` syntax in SQL)
+- `analyze` (optional): Run EXPLAIN ANALYZE to get actual execution statistics (executes the query)
+
+**Example - Basic query plan (SQLite):**
+```json
+{
+  "db_url": "sqlite:///./data/app.db",
+  "sql": "SELECT * FROM users WHERE email = :email",
+  "args": {
+    "email": "user@example.com"
+  }
+}
+```
+
+**Example - Performance analysis (PostgreSQL):**
+```json
+{
+  "db_url": "postgresql://localhost/mydb",
+  "sql": "SELECT u.name, COUNT(o.id) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name",
+  "analyze": true
+}
+```
+
+**Use cases:**
+- Identify slow queries and missing indexes
+- Analyze JOIN performance and query optimization opportunities
+- Compare execution plans between databases
+- Verify query efficiency before deploying to production
+
 ## How AI Assistants Use These Tools
 
 This server is designed for **dynamic database connections**. AI assistants specify the database URL in each request, allowing you to work with multiple databases seamlessly.
@@ -334,8 +369,9 @@ When you connect an AI assistant (like Claude or Codex) to this MCP server, it c
 2. **Explore database structure**: "What tables are in database X?"
 3. **Understand table schemas**: "Show me the columns in the users table from database Y"
 4. **Query data**: "How many active users in the production database?"
-5. **Compare across databases**: "Compare user counts between dev.db and prod.db"
-6. **Analyze data**: "Find duplicates in the PostgreSQL analytics database"
+5. **Analyze query performance**: "Explain the execution plan for this query"
+6. **Compare across databases**: "Compare user counts between dev.db and prod.db"
+7. **Optimize queries**: "Find slow queries and suggest indexes"
 
 The AI assistant will automatically extract the database path/URL from your request and use the appropriate tool with the correct `db_url` parameter.
 

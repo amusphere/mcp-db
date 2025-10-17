@@ -48,15 +48,17 @@ docker-compose up --build
 - Capture regression scenarios in Markdown or issue comments; align scenario names with the affected module (e.g., `sqlGuard-allowlist-quoted`)
 
 ## MCP Tools (stdio mode)
-The server exposes three MCP tools:
+The server exposes four MCP tools:
 - `db_tables` - List all tables in the database
 - `db_describe_table` - Get column information for a specific table
 - `db_execute` - Execute SQL with safety controls (read/write/DDL)
+- `db_explain` - Get query execution plan and performance information
 
 ## HTTP Endpoints (legacy --http-mode)
 - `POST /tools/db.tables` - List tables
 - `POST /tools/db.describe_table` - Describe table schema
 - `POST /tools/db.execute` - Execute SQL query
+- `POST /tools/db.explain` - Get query execution plan
 
 ## Commit & Pull Request Guidelines
 - Follow Conventional Commit prefixes observed in history (e.g., `feat:`, `fix:`, `chore:`) and keep messages under ~72 characters.

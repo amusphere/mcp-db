@@ -419,3 +419,242 @@ async function executeSqlite(
     throw new DatabaseError((error as Error).message);
   }
 }
+
+export interface ExplainResult {
+  plan: Record<string, unknown>[];
+  query: string;
+}
+
+export async function explainQuery(
+  config: NormalizedDatabaseConfig,
+  sql: string,
+  args: Record<string, unknown> | undefined,
+  analyze: boolean
+): Promise<ExplainResult> {
+  if (config.driver === "postgres") {
+    return explainPostgres(config.connectionString, sql, args, analyze);
+  }
+  if (config.driver === "sqlite") {
+    return explainSqlite(config.sqlitePath!, sql, args, analyze);
+  }
+  throw new DatabaseError("Unsupported database driver");
+}
+
+async function explainPostgres(
+  connectionString: string,
+  sql: string,
+  args: Record<string, unknown> | undefined,
+  analyze: boolean
+): Promise<ExplainResult> {
+  const pool = getPostgresPool(connectionString);
+  const client: PoolClient = await pool.connect();
+  try {
+    const { text, values } = bindPostgresParameters(sql, args);
+    const explainSql = analyze
+      ? `EXPLAIN (ANALYZE, FORMAT JSON) ${text}`
+      : `EXPLAIN (FORMAT JSON) ${text}`;
+    const result = await client.query({ text: explainSql, values });
+    return {
+      plan: result.rows[0]?.["QUERY PLAN"] ?? [],
+      query: text,
+    };
+  } catch (error) {
+    throw new DatabaseError((error as Error).message);
+  } finally {
+    client.release();
+  }
+}
+
+async function explainSqlite(
+  path: string,
+  sql: string,
+  args: Record<string, unknown> | undefined,
+  analyze: boolean
+): Promise<ExplainResult> {
+  const db = await getSqliteDatabase(path);
+  try {
+    // Default to EXPLAIN QUERY PLAN for human-readable plans; only use raw bytecode when analyze=true.
+    const explainCommand = analyze ? "EXPLAIN" : "EXPLAIN QUERY PLAN";
+
+    // For SQLite, we need to replace named parameters with placeholders
+    // before running EXPLAIN, since EXPLAIN doesn't bind parameters
+    let processedSql = sql;
+    let paramValues: unknown[] = [];
+    
+    if (args && Object.keys(args).length > 0) {
+      const replacement = replaceSqliteNamedParameters(sql, args);
+      processedSql = replacement.sql;
+      paramValues = replacement.values;
+    }
+
+    const explainSql = `${explainCommand} ${processedSql}`;
+    const rows = (await db.all(explainSql, paramValues)) as Array<Record<string, unknown>>;
+    return {
+      plan: rows,
+      query: sql,
+    };
+  } catch (error) {
+    throw new DatabaseError((error as Error).message);
+  }
+}
+
+function replaceSqliteNamedParameters(
+  sql: string,
+  args: Record<string, unknown>
+): { sql: string; values: unknown[] } {
+  const values: unknown[] = [];
+  let result = "";
+  const length = sql.length;
+  let index = 0;
+
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inBracket = false;
+  let inBacktick = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  while (index < length) {
+    const char = sql[index]!;
+    const nextChar = index + 1 < length ? sql[index + 1]! : undefined;
+
+    if (inLineComment) {
+      result += char;
+      if (char === "\n") {
+        inLineComment = false;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (inBlockComment) {
+      result += char;
+      if (char === "*" && nextChar === "/") {
+        result += nextChar;
+        index += 2;
+        inBlockComment = false;
+      } else {
+        index += 1;
+      }
+      continue;
+    }
+
+    if (inSingleQuote) {
+      result += char;
+      if (char === "'") {
+        if (nextChar === "'") {
+          result += nextChar;
+          index += 2;
+          continue;
+        }
+        inSingleQuote = false;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      result += char;
+      if (char === '"') {
+        if (nextChar === '"') {
+          result += nextChar;
+          index += 2;
+          continue;
+        }
+        inDoubleQuote = false;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (inBacktick) {
+      result += char;
+      if (char === "`") {
+        if (nextChar === "`") {
+          result += nextChar;
+          index += 2;
+          continue;
+        }
+        inBacktick = false;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (inBracket) {
+      result += char;
+      if (char === "]") {
+        if (nextChar === "]") {
+          result += nextChar;
+          index += 2;
+          continue;
+        }
+        inBracket = false;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (char === "-" && nextChar === "-") {
+      result += char + nextChar;
+      index += 2;
+      inLineComment = true;
+      continue;
+    }
+
+    if (char === "/" && nextChar === "*") {
+      result += char + nextChar;
+      index += 2;
+      inBlockComment = true;
+      continue;
+    }
+
+    if (char === "'") {
+      inSingleQuote = true;
+      result += char;
+      index += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true;
+      result += char;
+      index += 1;
+      continue;
+    }
+
+    if (char === "`") {
+      inBacktick = true;
+      result += char;
+      index += 1;
+      continue;
+    }
+
+    if (char === "[") {
+      inBracket = true;
+      result += char;
+      index += 1;
+      continue;
+    }
+
+    if (char === ":" && nextChar && /[A-Za-z_]/.test(nextChar)) {
+      let nameEnd = index + 2;
+      while (nameEnd < length && /[A-Za-z0-9_]/.test(sql[nameEnd]!)) {
+        nameEnd += 1;
+      }
+      const paramName = sql.slice(index + 1, nameEnd);
+      if (!Object.prototype.hasOwnProperty.call(args, paramName)) {
+        throw new DatabaseError(`Missing value for SQL parameter :${paramName}`);
+      }
+      result += "?";
+      values.push(args[paramName]);
+      index = nameEnd;
+      continue;
+    }
+
+    result += char;
+    index += 1;
+  }
+
+  return { sql: result, values };
+}
