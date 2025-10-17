@@ -18,7 +18,10 @@ app.get("/healthz", () => ({ status: "ok" }));
 if (isMetricsEnabled()) {
   app.get("/metrics", async (request, reply) => {
     const metrics = await getMetrics();
-    await reply.type("text/plain").send(metrics);
+    await reply
+      .header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8')
+      .header('Cache-Control', 'no-cache')
+      .send(metrics);
   });
 }
 
