@@ -23,18 +23,6 @@ jobs:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
         continue-on-error: true  # Don't fail on potential false positives
 
-      - name: Setup Node.js for OSV-Scanner
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Run OSV-Scanner (dependency vulnerability scanning)
-        uses: google/osv-scanner-action@v1
-        with:
-          scan-args: |-
-            --lockfile=package-lock.json
-        continue-on-error: true  # Don't fail on vulnerabilities, just report
-
       - name: Run Trivy (filesystem vulnerability scanning)
         uses: aquasecurity/trivy-action@master
         with:
